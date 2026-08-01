@@ -84,18 +84,22 @@ func get_collision_count() -> int:
 
 
 func apply_bike_style(style: String) -> void:
-	var handlebar := _camera.get_node_or_null("Handlebar") as MeshInstance3D
-	if handlebar == null or handlebar.material_override == null:
+	var cockpit := _camera.get_node_or_null("BikeCockpit")
+	if cockpit == null:
 		return
-	var material := handlebar.material_override.duplicate() as StandardMaterial3D
+	var frame_color := Color("a83f38")
 	match style:
 		"ocean_blue":
-			material.albedo_color = Color("3d77a8")
+			frame_color = Color("3d77a8")
 		"sunset_gold":
-			material.albedo_color = Color("e0a63b")
-		_:
-			material.albedo_color = Color("a83f38")
-	handlebar.material_override = material
+			frame_color = Color("e0a63b")
+	for node in cockpit.find_children("*", "MeshInstance3D", true, false):
+		var surface := node as MeshInstance3D
+		if not surface.is_in_group("bike_style_surface") or surface.material_override == null:
+			continue
+		var material := surface.material_override.duplicate() as StandardMaterial3D
+		material.albedo_color = frame_color
+		surface.material_override = material
 
 
 func set_reset_transform_to_current() -> void:

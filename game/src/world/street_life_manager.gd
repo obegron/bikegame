@@ -284,34 +284,61 @@ func _create_car(index: int) -> CharacterBody3D:
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	body.add_child(collision)
+	var visual_root := Node3D.new()
+	visual_root.name = "VisualRoot"
+	body.add_child(visual_root)
 	var colors := [Color("d95f59"), Color("4f86b8"), Color("e5b94f"), Color("77a26a")]
-	var body_mesh := BoxMesh.new()
-	body_mesh.size = Vector3(1.7, 0.62, 3.2)
-	var body_visual := MeshInstance3D.new()
-	body_visual.position.y = -0.12
-	body_visual.mesh = body_mesh
-	body_visual.material_override = _material(colors[index % colors.size()])
-	body.add_child(body_visual)
-	var cabin_mesh := BoxMesh.new()
-	cabin_mesh.size = Vector3(1.42, 0.55, 1.65)
-	var cabin := MeshInstance3D.new()
-	cabin.position = Vector3(0.0, 0.44, 0.1)
-	cabin.mesh = cabin_mesh
-	cabin.material_override = _material(colors[index % colors.size()].lightened(0.12))
-	body.add_child(cabin)
+	var paint: Color = colors[index % colors.size()]
+	var glass := Color("263e4b")
+	# A readable bonnet/cabin/boot silhouette costs only a handful of boxes but
+	# stops traffic reading as a single placeholder block from rider height.
+	_add_box_multimesh(visual_root, "PaintedBody", [
+		_scaled_visual_transform(Vector3(0.0, -0.12, 0.0), Vector3(1.72, 0.52, 3.18)),
+		_scaled_visual_transform(Vector3(0.0, 0.18, -1.05), Vector3(1.64, 0.24, 0.92)),
+		_scaled_visual_transform(Vector3(0.0, 0.17, 1.22), Vector3(1.64, 0.26, 0.62)),
+		_scaled_visual_transform(Vector3(0.0, 0.48, 0.14), Vector3(1.42, 0.58, 1.42)),
+		_scaled_visual_transform(Vector3(0.0, 0.79, 0.17), Vector3(1.3, 0.12, 1.08)),
+	], paint)
+	var glass_panels: Array[Transform3D] = [
+		_scaled_visual_transform(Vector3(0.0, 0.49, -0.585), Vector3(1.18, 0.35, 0.035)),
+		_scaled_visual_transform(Vector3(0.0, 0.49, 0.865), Vector3(1.18, 0.35, 0.035)),
+	]
+	var dark_trim: Array[Transform3D] = [
+		_scaled_visual_transform(Vector3(0.0, -0.18, -1.64), Vector3(1.48, 0.11, 0.1)),
+		_scaled_visual_transform(Vector3(0.0, -0.18, 1.64), Vector3(1.48, 0.11, 0.1)),
+	]
+	for side_x in [-0.718, 0.718]:
+		glass_panels.append(_scaled_visual_transform(
+			Vector3(side_x, 0.49, 0.15), Vector3(0.035, 0.35, 0.94)
+		))
+		dark_trim.append(_scaled_visual_transform(
+			Vector3(side_x * 1.015, 0.27, 0.48), Vector3(0.025, 0.055, 0.22)
+		))
+	_add_box_multimesh(visual_root, "Glazing", glass_panels, glass)
+	_add_box_multimesh(visual_root, "BumpersAndHandles", dark_trim, Color("33383a"))
+	var headlights: Array[Transform3D] = []
+	var tail_lights: Array[Transform3D] = []
+	for light_x in [-0.55, 0.55]:
+		headlights.append(_scaled_visual_transform(
+			Vector3(light_x, 0.02, -1.605), Vector3(0.3, 0.18, 0.045)
+		))
+		tail_lights.append(_scaled_visual_transform(
+			Vector3(light_x, 0.02, 1.605), Vector3(0.28, 0.17, 0.045)
+		))
+	_add_box_multimesh(visual_root, "Headlights", headlights, Color("f1d999"))
+	_add_box_multimesh(visual_root, "TailLights", tail_lights, Color("9d292d"))
+	var wheels: Array[Transform3D] = []
+	var hubs: Array[Transform3D] = []
 	for wheel_x in [-0.88, 0.88]:
 		for wheel_z in [-1.03, 1.03]:
-			var wheel_mesh := CylinderMesh.new()
-			wheel_mesh.top_radius = 0.27
-			wheel_mesh.bottom_radius = 0.27
-			wheel_mesh.height = 0.16
-			wheel_mesh.radial_segments = 10
-			var wheel := MeshInstance3D.new()
-			wheel.position = Vector3(wheel_x, -0.34, wheel_z)
-			wheel.rotation_degrees.z = 90.0
-			wheel.mesh = wheel_mesh
-			wheel.material_override = _material(Color("25292b"))
-			body.add_child(wheel)
+			wheels.append(_scaled_visual_transform(
+				Vector3(wheel_x, -0.33, wheel_z), Vector3(0.27, 0.16, 0.27), 90.0
+			))
+			hubs.append(_scaled_visual_transform(
+				Vector3(wheel_x, -0.33, wheel_z), Vector3(0.12, 0.175, 0.12), 90.0
+			))
+	_add_cylinder_multimesh(visual_root, "Tyres", wheels, Color("25292b"))
+	_add_cylinder_multimesh(visual_root, "WheelHubs", hubs, Color("9ca2a0"))
 	return body
 
 
@@ -327,14 +354,37 @@ func _create_pedestrian(index: int) -> CharacterBody3D:
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	body.add_child(collision)
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.32
-	mesh.height = 1.7
-	var visual := MeshInstance3D.new()
-	visual.mesh = mesh
-	var colors := [Color("6b82b4"), Color("d37f64"), Color("6ca07b"), Color("ac78a6")]
-	visual.material_override = _material(colors[index % colors.size()])
-	body.add_child(visual)
+	var visual_root := Node3D.new()
+	visual_root.name = "VisualRoot"
+	body.add_child(visual_root)
+	var coat_colors := [Color("6b82b4"), Color("d37f64"), Color("6ca07b"), Color("ac78a6")]
+	var trouser_colors := [Color("344653"), Color("4a423c"), Color("33483c"), Color("514055")]
+	var skin_colors := [Color("d6a276"), Color("8f5f43"), Color("efc29a"), Color("b87955")]
+	var coat: Color = coat_colors[index % coat_colors.size()]
+	var trousers: Color = trouser_colors[index % trouser_colors.size()]
+	var skin: Color = skin_colors[index % skin_colors.size()]
+	_add_capsule_visual(visual_root, "Torso", Vector3(0.0, 0.08, 0.0), 0.245, 0.82, coat)
+	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 0.65, 0.0), 0.19, skin)
+	_add_box_visual(visual_root, "Hair", Vector3(0.0, 0.815, 0.015), Vector3(0.33, 0.1, 0.31), Color("49372d").lightened(float(index % 3) * 0.08))
+	var legs: Array[Transform3D] = []
+	var shoes: Array[Transform3D] = []
+	for leg_x in [-0.13, 0.13]:
+		legs.append(_scaled_visual_transform(
+			Vector3(leg_x, -0.53, 0.0), Vector3(0.13, 0.62, 0.15)
+		))
+		shoes.append(_scaled_visual_transform(
+			Vector3(leg_x, -0.82, -0.045), Vector3(0.16, 0.1, 0.27)
+		))
+	_add_box_multimesh(visual_root, "Legs", legs, trousers)
+	_add_box_multimesh(visual_root, "Shoes", shoes, Color("292a2b"))
+	var arms: Array[Transform3D] = []
+	for arm_x in [-0.32, 0.32]:
+		arms.append(_scaled_visual_transform(
+			Vector3(arm_x, 0.06, 0.0),
+			Vector3(0.12, 0.58, 0.13),
+			-8.0 * signf(arm_x)
+		))
+	_add_box_multimesh(visual_root, "Arms", arms, coat.darkened(0.04))
 	return body
 
 
@@ -462,6 +512,66 @@ func _set_farm_collision(body: CharacterBody3D, size: Vector3, center_y: float) 
 	collision.position.y = center_y
 	collision.shape = shape
 	body.add_child(collision)
+
+
+func _scaled_visual_transform(
+	at: Vector3,
+	size: Vector3,
+	rotation_z_degrees := 0.0
+) -> Transform3D:
+	var basis := Basis.IDENTITY.rotated(
+		Vector3.FORWARD,
+		deg_to_rad(rotation_z_degrees)
+	)
+	basis.x *= size.x
+	basis.y *= size.y
+	basis.z *= size.z
+	return Transform3D(basis, at)
+
+
+func _add_box_multimesh(
+	parent: Node3D,
+	node_name: String,
+	transforms: Array,
+	color: Color
+) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3.ONE
+	_add_visual_multimesh(parent, node_name, mesh, transforms, color)
+
+
+func _add_cylinder_multimesh(
+	parent: Node3D,
+	node_name: String,
+	transforms: Array,
+	color: Color
+) -> void:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 1.0
+	mesh.bottom_radius = 1.0
+	mesh.height = 1.0
+	mesh.radial_segments = 10
+	_add_visual_multimesh(parent, node_name, mesh, transforms, color)
+
+
+func _add_visual_multimesh(
+	parent: Node3D,
+	node_name: String,
+	mesh: Mesh,
+	transforms: Array,
+	color: Color
+) -> void:
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = mesh
+	multimesh.instance_count = transforms.size()
+	for index in transforms.size():
+		multimesh.set_instance_transform(index, transforms[index])
+	var visual := MultiMeshInstance3D.new()
+	visual.name = node_name
+	visual.multimesh = multimesh
+	visual.material_override = _material(color)
+	parent.add_child(visual)
 
 
 func _add_box_visual(

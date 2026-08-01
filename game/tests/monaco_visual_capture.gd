@@ -54,6 +54,17 @@ func _initialize() -> void:
 
 
 func _capture() -> void:
+	var hour := 10.5
+	var weather_name := "clear"
+	var suffix := ""
+	var arguments := OS.get_cmdline_user_args()
+	for index in arguments.size():
+		if arguments[index] == "--hour" and index + 1 < arguments.size():
+			hour = float(arguments[index + 1])
+		elif arguments[index] == "--weather" and index + 1 < arguments.size():
+			weather_name = arguments[index + 1].to_lower()
+		elif arguments[index] == "--suffix" and index + 1 < arguments.size():
+			suffix = arguments[index + 1].to_lower()
 	var packed := load("res://scenes/monaco_game.tscn") as PackedScene
 	var game = packed.instantiate()
 	root.add_child(game)
@@ -62,9 +73,13 @@ func _capture() -> void:
 	game.get_node("Onboarding/Overlay").visible = false
 	game.get_node("DeliveryHud").visible = false
 	game.get_node("PauseMenu").visible = false
-	game.get_node("Services/WorldClock").set_hour(10.5)
+	var clock = game.get_node("Services/WorldClock")
+	clock.running = false
+	clock.set_hour(hour)
 	var weather = game.get_node("Services/Weather")
-	weather.call("set_weather", "clear")
+	weather.automatic_weather = false
+	weather.call("set_weather", weather_name, true)
+	game.get_node("Services/TimeOfDay").call("_process", 0.0)
 	var player: CharacterBody3D = game.get_node("Player")
 	var camera: Camera3D = game.get_node("Player/Camera3D")
 	var city = game.get_node("City")
@@ -83,9 +98,12 @@ func _capture() -> void:
 		camera.rotation = Vector3.ZERO
 		for _frame in 5:
 			await process_frame
+		var output_path := String(capture_data[0])
+		if not suffix.is_empty():
+			output_path = output_path.trim_suffix(".png") + "_" + suffix + ".png"
 		var image := root.get_texture().get_image()
-		image.save_png(capture_data[0])
-		print("Saved %s" % capture_data[0])
+		image.save_png(output_path)
+		print("Saved %s" % output_path)
 	game.queue_free()
 	await process_frame
 	quit()

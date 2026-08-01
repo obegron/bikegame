@@ -106,10 +106,10 @@ func _process(delta: float) -> void:
 		0.48 + mediterranean_warmth * 0.08
 	)
 	environment.ambient_light_energy = maxf(0.04, light_energy * 0.24)
-	environment.tonemap_exposure = lerpf(1.0, 0.76, daylight) * lerpf(1.0, 0.94, cloudiness)
-	environment.adjustment_contrast = lerpf(1.04, 1.09, daylight)
+	environment.tonemap_exposure = lerpf(1.0, 0.82, daylight) * lerpf(1.0, 0.94, cloudiness)
+	environment.adjustment_contrast = lerpf(1.02, 1.06, daylight)
 	environment.adjustment_saturation = (
-		lerpf(1.02, 1.06 + mediterranean_warmth * 0.055, daylight)
+		lerpf(1.0, 1.01 + mediterranean_warmth * 0.025, daylight)
 		* lerpf(1.0, 0.88, cloudiness)
 	)
 	environment.fog_enabled = weather_fog > 0.002

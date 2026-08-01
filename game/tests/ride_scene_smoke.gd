@@ -411,6 +411,10 @@ func _run() -> void:
 		"all three north-bank bridge junctions should use clean raised merge aprons"
 	)
 	_expect(
+		get_nodes_in_group("clean_coastal_merge").size() == 4,
+		"the two acute coastal joins should use dedicated unified aprons"
+	)
+	_expect(
 		get_nodes_in_group("clean_gateway_junction").size() == 8,
 		"the Orchard, Hill, and east-coast gateways should use unified turning aprons"
 	)

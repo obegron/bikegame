@@ -3825,6 +3825,7 @@ func _make_heritage_house(
 			style_seed
 		)
 	_queue_house_architectural_details(
+		node_name,
 		grounded_at,
 		width,
 		height,
@@ -3885,6 +3886,16 @@ func _make_heritage_house(
 				)
 			)
 			if floor_index == 0 and absf(horizontal) < 0.8:
+				continue
+			# Delivery-game signage is added after the procedural city is built.
+			# Reserve its facade bay here so lettering never sits on top of a
+			# generic upper-storey window or climbing plant.
+			if (
+				node_name == "Boulangerie du Pont"
+				and window_y > 3.15
+				and window_y < 5.1
+				and absf(horizontal) < 3.15
+			):
 				continue
 			var front_window_transform := Transform3D(
 				facing_basis,
@@ -4214,6 +4225,7 @@ func _make_heritage_entry_stairs(
 
 
 func _queue_house_architectural_details(
+	node_name: String,
 	grounded_at: Vector3,
 	width: float,
 	height: float,
@@ -4348,7 +4360,11 @@ func _queue_house_architectural_details(
 				)
 			))
 
-	if cornish_style and style_seed % 2 == 0:
+	if (
+		cornish_style
+		and style_seed % 2 == 0
+		and node_name != "Boulangerie du Pont"
+	):
 		var vine_x := width * (-0.36 if style_seed % 4 == 0 else 0.36)
 		var vine_height := minf(height - 0.7, 4.8)
 		_house_vine_stem_transforms.append(_scaled_box_transform(
@@ -5195,6 +5211,18 @@ func _make_modern_path(node_name: String, points: Array[Vector3], width: float) 
 			width + 3.0,
 			width
 		)
+	# A polyline elbow needs one owner for both its grading and its visible top
+	# surface. Independent ribbons are otherwise free to expose their sidewalk
+	# layer through the acute inside corner, especially on sloping coast roads.
+	for index in range(1, points.size() - 1):
+		if _path_turn_angle(points, index) < deg_to_rad(20.0):
+			continue
+		_register_road_corridor(
+			points[index],
+			points[index],
+			(width + 3.0) * 1.18,
+			width * 1.18
+		)
 	if _road_plan_only:
 		return
 	var samples := _sample_polyline(points, 3.5)
@@ -5218,6 +5246,42 @@ func _make_modern_path(node_name: String, points: Array[Vector3], width: float) 
 			CYCLE_RED,
 			0.15
 		)
+	for index in range(1, points.size() - 1):
+		if _path_turn_angle(points, index) < deg_to_rad(20.0):
+			continue
+		var bend := points[index]
+		var sidewalk := _make_terrain_disc(
+			node_name + " bend sidewalk",
+			bend,
+			(width + 3.0) * 0.59,
+			SIDEWALK,
+			0.18
+		)
+		var roadway := _make_terrain_disc(
+			node_name + " bend roadway",
+			bend,
+			width * 0.59,
+			ASPHALT,
+			0.215
+		)
+		sidewalk.add_to_group("clean_road_bend")
+		roadway.add_to_group("clean_road_bend")
+
+
+func _path_turn_angle(points: Array[Vector3], index: int) -> float:
+	if index <= 0 or index >= points.size() - 1:
+		return 0.0
+	var incoming := Vector2(
+		points[index].x - points[index - 1].x,
+		points[index].z - points[index - 1].z
+	).normalized()
+	var outgoing := Vector2(
+		points[index + 1].x - points[index].x,
+		points[index + 1].z - points[index].z
+	).normalized()
+	if incoming.is_zero_approx() or outgoing.is_zero_approx():
+		return 0.0
+	return acos(clampf(incoming.dot(outgoing), -1.0, 1.0))
 
 
 func _make_cobble_path(node_name: String, points: Array[Vector3], width: float) -> void:
@@ -5306,8 +5370,9 @@ func _make_terrain_ribbon(
 			0.0,
 			following.z - previous.z
 		).normalized()
-		var side := Vector3(-tangent.z, 0.0, tangent.x)
-		var center := samples[index] + side * center_offset
+		var join_side := _ribbon_join_side(samples, index)
+		var side := join_side.normalized()
+		var center := samples[index] + join_side * center_offset
 		if index > 0:
 			distance_along += Vector2(
 				samples[index].x - samples[index - 1].x,
@@ -5315,7 +5380,7 @@ func _make_terrain_ribbon(
 			).length()
 		for across in row_size:
 			var across_weight := float(across) / float(across_segments)
-			var vertex := center + side * (across_weight - 0.5) * width
+			var vertex := center + join_side * (across_weight - 0.5) * width
 			vertex.y = ground_height_at(vertex.x, vertex.z) + height_offset
 			vertices.append(vertex)
 			normals.append(Vector3.UP)
@@ -5354,9 +5419,45 @@ func _make_terrain_ribbon(
 	instance.name = node_name
 	instance.mesh = mesh
 	instance.material_override = _surface_material(color)
+	# These thin meshes behave as terrain decals. Letting them cast directional
+	# shadows turns their small height offsets into long black wedges at joins.
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	if _is_textured_surface_color(color):
 		instance.add_to_group("textured_road")
 	add_child(instance)
+
+
+func _ribbon_join_side(samples: Array[Vector3], index: int) -> Vector3:
+	var current := samples[index]
+	var incoming := Vector3.ZERO
+	var outgoing := Vector3.ZERO
+	if index > 0:
+		incoming = Vector3(
+			current.x - samples[index - 1].x,
+			0.0,
+			current.z - samples[index - 1].z
+		).normalized()
+	if index + 1 < samples.size():
+		outgoing = Vector3(
+			samples[index + 1].x - current.x,
+			0.0,
+			samples[index + 1].z - current.z
+		).normalized()
+	if incoming.is_zero_approx():
+		incoming = outgoing
+	if outgoing.is_zero_approx():
+		outgoing = incoming
+	var incoming_side := Vector3(-incoming.z, 0.0, incoming.x)
+	var outgoing_side := Vector3(-outgoing.z, 0.0, outgoing.x)
+	var combined := incoming_side + outgoing_side
+	if combined.length_squared() < 0.001:
+		return outgoing_side
+	var miter := combined.normalized()
+	var projection := absf(miter.dot(outgoing_side))
+	# A true miter keeps every nested road layer aligned around a bend. Limit
+	# very acute corners so an almost-reversing polyline cannot create a spike.
+	var miter_length := minf(1.0 / maxf(projection, 0.35), 1.8)
+	return miter * miter_length
 
 
 func _make_terrain_polygon(
@@ -5405,6 +5506,7 @@ func _make_terrain_polygon(
 	instance.name = node_name
 	instance.mesh = mesh
 	instance.material_override = _surface_material(color)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(instance)
 	return instance
 
@@ -5450,8 +5552,6 @@ func _make_road_junctions() -> void:
 		Vector3(92.0, 0.0, -82.0),
 		Vector3(-150.0, 0.0, -132.0),
 		Vector3(150.0, 0.0, -121.0),
-		Vector3(-128.0, 0.0, 117.0),
-		Vector3(124.0, 0.0, 101.0),
 		Vector3(-152.0, 0.0, -82.0),
 		Vector3(152.0, 0.0, -82.0),
 		Vector3(-182.0, 0.0, -68.0),
@@ -5490,10 +5590,17 @@ func _make_road_junctions() -> void:
 			"show_cycle_ring": false,
 		},
 	]
-	var north_bank_merges: Array[Vector3] = [
+	var priority_merges: Array[Vector3] = [
 		Vector3(-28.0, 0.0, -132.0),
 		Vector3(70.0, 0.0, -133.0),
 		Vector3(98.0, 0.0, -130.0),
+		Vector3(124.0, 0.0, 101.0),
+	]
+	var orchard_merge := Vector3(-128.0, 0.0, 117.0)
+	var orchard_merge_arms: Array[Vector3] = [
+		Vector3(-137.0, 0.0, 96.0),
+		Vector3(-162.0, 0.0, 96.0),
+		Vector3(-82.0, 0.0, 122.75),
 	]
 
 	if _road_plan_only:
@@ -5507,8 +5614,11 @@ func _make_road_junctions() -> void:
 				float(junction.sidewalk_outer) * 2.0,
 				float(junction.roadway_radius) * 2.0
 			)
-		for position in north_bank_merges:
+		for position in priority_merges:
 			_register_road_corridor(position, position, 18.4, 15.1)
+		# This is a shallow Y rather than an ordinary crossing. Its two western
+		# arms overlap for roughly fifteen metres before visibly separating.
+		_register_road_corridor(orchard_merge, orchard_merge, 38.0, 32.0)
 		return
 
 	for position in simple_junctions:
@@ -5562,23 +5672,48 @@ func _make_road_junctions() -> void:
 	# These are acute bridge-to-promenade merges rather than right-angle
 	# crossings. A larger raised apron masks the overlapping sidewalk, lane,
 	# and marking ribbons and leaves one unambiguous rideable surface.
-	for position in north_bank_merges:
+	for position in priority_merges:
 		var sidewalk := _make_terrain_disc(
-			"North bank merge sidewalk",
+			"Priority merge sidewalk",
 			position,
 			9.2,
 			SIDEWALK,
 			0.185
 		)
 		var roadway := _make_terrain_disc(
-			"North bank merge roadway",
+			"Priority merge roadway",
 			position,
 			7.55,
 			ASPHALT,
 			0.225
 		)
-		sidewalk.add_to_group("clean_road_merge")
-		roadway.add_to_group("clean_road_merge")
+		var merge_group := (
+			"clean_coastal_merge"
+			if position.is_equal_approx(Vector3(124.0, 0.0, 101.0))
+			else "clean_road_merge"
+		)
+		sidewalk.add_to_group(merge_group)
+		roadway.add_to_group(merge_group)
+	var orchard_sidewalk := _make_terrain_merge_apron(
+		"Orchard coast merge sidewalk",
+		orchard_merge,
+		orchard_merge_arms,
+		15.5,
+		6.1,
+		SIDEWALK,
+		0.19
+	)
+	var orchard_roadway := _make_terrain_merge_apron(
+		"Orchard coast merge roadway",
+		orchard_merge,
+		orchard_merge_arms,
+		15.5,
+		4.65,
+		ASPHALT,
+		0.235
+	)
+	orchard_sidewalk.add_to_group("clean_coastal_merge")
+	orchard_roadway.add_to_group("clean_coastal_merge")
 	_make_priority_merge_path(
 		"North bank western merge",
 		[
@@ -5597,6 +5732,35 @@ func _make_road_junctions() -> void:
 		],
 		9.0
 	)
+
+
+func _make_terrain_merge_apron(
+	node_name: String,
+	center: Vector3,
+	arms: Array[Vector3],
+	reach: float,
+	half_width: float,
+	color: Color,
+	height_offset: float
+) -> MeshInstance3D:
+	var center_2d := Vector2(center.x, center.z)
+	var corners := PackedVector2Array()
+	for arm in arms:
+		var arm_offset := Vector2(arm.x, arm.z) - center_2d
+		if arm_offset.is_zero_approx():
+			continue
+		var direction := arm_offset.normalized()
+		var side := Vector2(-direction.y, direction.x)
+		var arm_reach := minf(reach, arm_offset.length())
+		corners.append(center_2d + side * half_width)
+		corners.append(center_2d - side * half_width)
+		corners.append(center_2d + direction * arm_reach + side * half_width)
+		corners.append(center_2d + direction * arm_reach - side * half_width)
+	var hull := Geometry2D.convex_hull(corners)
+	var polygon_points: Array[Vector2] = []
+	for point in hull:
+		polygon_points.append(point)
+	return _make_terrain_polygon(node_name, polygon_points, color, height_offset)
 
 
 func _make_priority_merge_path(
@@ -5694,6 +5858,7 @@ func _make_terrain_disc(
 	instance.name = node_name
 	instance.mesh = mesh
 	instance.material_override = _surface_material(color)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	if _is_textured_surface_color(color):
 		instance.add_to_group("textured_road")
 	add_child(instance)
@@ -5757,6 +5922,7 @@ func _make_terrain_ring(
 	instance.name = node_name
 	instance.mesh = mesh
 	instance.material_override = _surface_material(color)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	if _is_textured_surface_color(color):
 		instance.add_to_group("textured_road")
 	add_child(instance)
@@ -5780,6 +5946,7 @@ func _make_visual_surface_segment(
 	instance.basis = _surface_basis(delta)
 	instance.mesh = mesh
 	instance.material_override = _material(color)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(instance)
 	return instance
 
@@ -5949,7 +6116,7 @@ func _flush_decoration_batches() -> void:
 			_house_vine_stem_transforms,
 			Color("385d35")
 		),
-		_make_unit_sphere_multimesh(
+		_make_unit_leaf_multimesh(
 			"Cottage climbing leaves",
 			_house_vine_leaf_transforms,
 			Color("4d7c4a")
@@ -6363,6 +6530,44 @@ func _make_unit_sphere_multimesh(
 	mesh.radial_segments = 8
 	mesh.rings = 4
 	return _make_multimesh(node_name, mesh, transforms, _material(color))
+
+
+func _make_unit_leaf_multimesh(
+	node_name: String,
+	transforms: Array[Transform3D],
+	color: Color
+) -> MultiMeshInstance3D:
+	# A tapered, slightly folded card reads as foliage from rider distance while
+	# avoiding the bead-like silhouette produced by scaled sphere primitives.
+	var vertices := PackedVector3Array([
+		Vector3(0.0, 1.0, 0.0),
+		Vector3(0.72, 0.0, 0.08),
+		Vector3(0.0, -1.0, 0.0),
+		Vector3(-0.72, 0.0, 0.08),
+		Vector3(0.0, 1.0, 0.0),
+		Vector3(0.72, 0.0, 0.08),
+		Vector3(0.0, -1.0, 0.0),
+		Vector3(-0.72, 0.0, 0.08),
+	])
+	var normals := PackedVector3Array()
+	for _index in 4:
+		normals.append(Vector3.FORWARD)
+	for _index in 4:
+		normals.append(Vector3.BACK)
+	var indices := PackedInt32Array([
+		0, 1, 2, 0, 2, 3,
+		4, 6, 5, 4, 7, 6,
+	])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var material := _material(color)
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return _make_multimesh(node_name, mesh, transforms, material)
 
 
 func _make_unit_cylinder_multimesh(
