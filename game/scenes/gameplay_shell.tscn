@@ -1,0 +1,560 @@
+[gd_scene load_steps=25 format=3]
+
+[ext_resource type="Script" path="res://src/game/delivery_game.gd" id="1_game"]
+[ext_resource type="Script" path="res://src/world/delivery_city.gd" id="2_city"]
+[ext_resource type="Script" path="res://src/input/bike_input_adapter.gd" id="3_input"]
+[ext_resource type="Script" path="res://src/player/bike_controller.gd" id="4_player"]
+[ext_resource type="Script" path="res://src/core/world_clock.gd" id="5_clock"]
+[ext_resource type="Script" path="res://src/core/order_service.gd" id="6_orders"]
+[ext_resource type="Script" path="res://src/core/economy_service.gd" id="7_economy"]
+[ext_resource type="Script" path="res://src/world/time_of_day_controller.gd" id="8_time"]
+[ext_resource type="Script" path="res://src/ui/delivery_hud.gd" id="9_hud"]
+[ext_resource type="Script" path="res://src/world/street_life_manager.gd" id="10_street"]
+[ext_resource type="Script" path="res://src/core/progression_service.gd" id="11_progress"]
+[ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="12_pause"]
+[ext_resource type="Script" path="res://src/ui/onboarding.gd" id="13_onboarding"]
+[ext_resource type="Script" path="res://src/audio/audio_feedback.gd" id="14_audio"]
+[ext_resource type="Script" path="res://src/network/multiplayer_service.gd" id="15_network"]
+[ext_resource type="Script" path="res://src/ui/courier_minimap.gd" id="16_minimap"]
+[ext_resource type="Script" path="res://src/world/street_lighting_controller.gd" id="17_lighting"]
+[ext_resource type="Script" path="res://src/world/weather_controller.gd" id="18_weather"]
+
+[sub_resource type="Environment" id="Environment_city"]
+background_mode = 1
+background_color = Color(0.44, 0.71, 0.83, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.82, 0.86, 0.82, 1)
+ambient_light_energy = 0.26
+tonemap_mode = 3
+tonemap_exposure = 0.76
+adjustment_enabled = true
+adjustment_contrast = 1.09
+adjustment_saturation = 1.06
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
+radius = 0.38
+height = 1.45
+
+[sub_resource type="BoxMesh" id="BoxMesh_handlebar"]
+size = Vector3(1.05, 0.03, 0.03)
+
+[sub_resource type="StandardMaterial3D" id="Material_handlebar"]
+albedo_color = Color(0.08, 0.09, 0.1, 1)
+metallic = 0.65
+roughness = 0.3
+
+[sub_resource type="SphereMesh" id="SphereMesh_hand"]
+radius = 0.065
+height = 0.13
+
+[sub_resource type="StandardMaterial3D" id="Material_glove"]
+albedo_color = Color(0.48, 0.12, 0.1, 1)
+roughness = 0.72
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_dark"]
+bg_color = Color(0.035, 0.045, 0.055, 0.88)
+corner_radius_top_left = 7
+corner_radius_top_right = 7
+corner_radius_bottom_right = 7
+corner_radius_bottom_left = 7
+
+[node name="DeliveryGame" type="Node3D"]
+script = ExtResource("1_game")
+input_adapter_path = NodePath("InputAdapter")
+player_path = NodePath("Player")
+world_clock_path = NodePath("Services/WorldClock")
+order_service_path = NodePath("Services/OrderService")
+economy_service_path = NodePath("Services/EconomyService")
+progression_service_path = NodePath("Services/ProgressionService")
+multiplayer_service_path = NodePath("Services/MultiplayerService")
+
+[node name="City" type="Node3D" parent="."]
+script = ExtResource("2_city")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_city")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -25, 0)
+light_energy = 1.0
+light_angular_distance = 0.35
+shadow_enabled = true
+shadow_opacity = 0.9
+
+[node name="InputAdapter" type="Node" parent="."]
+script = ExtResource("3_input")
+
+[node name="Services" type="Node" parent="."]
+
+[node name="WorldClock" type="Node" parent="Services"]
+script = ExtResource("5_clock")
+day_duration_seconds = 720.0
+start_hour = 7.0
+
+[node name="OrderService" type="Node" parent="Services"]
+script = ExtResource("6_orders")
+
+[node name="EconomyService" type="Node" parent="Services"]
+script = ExtResource("7_economy")
+
+[node name="ProgressionService" type="Node" parent="Services"]
+script = ExtResource("11_progress")
+
+[node name="MultiplayerService" type="Node" parent="Services"]
+script = ExtResource("15_network")
+game_path = NodePath("../..")
+player_path = NodePath("../../Player")
+clock_path = NodePath("../WorldClock")
+order_service_path = NodePath("../OrderService")
+
+[node name="Weather" type="Node" parent="Services"]
+script = ExtResource("18_weather")
+player_path = NodePath("../../Player")
+
+[node name="TimeOfDay" type="Node" parent="Services"]
+script = ExtResource("8_time")
+clock_path = NodePath("../WorldClock")
+environment_path = NodePath("../../WorldEnvironment")
+sun_path = NodePath("../../Sun")
+weather_path = NodePath("../Weather")
+
+[node name="StreetLighting" type="Node" parent="Services"]
+script = ExtResource("17_lighting")
+clock_path = NodePath("../WorldClock")
+city_path = NodePath("../../City")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 112)
+collision_mask = 15
+script = ExtResource("4_player")
+input_adapter_path = NodePath("../InputAdapter")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+position = Vector3(0, 0.72, 0)
+shape = SubResource("CapsuleShape_player")
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+position = Vector3(0, 1.58, 0)
+current = true
+near = 0.05
+
+[node name="BikeHeadlight" type="SpotLight3D" parent="Player/Camera3D"]
+position = Vector3(0, -0.22, -0.42)
+visible = false
+light_color = Color(1, 0.91, 0.72, 1)
+light_energy = 0.0
+shadow_enabled = false
+spot_range = 42.0
+spot_attenuation = 0.68
+spot_angle = 42.0
+spot_angle_attenuation = 1.15
+
+[node name="Handlebar" type="MeshInstance3D" parent="Player/Camera3D"]
+position = Vector3(0, -0.48, -0.98)
+mesh = SubResource("BoxMesh_handlebar")
+material_override = SubResource("Material_handlebar")
+
+[node name="LeftHand" type="MeshInstance3D" parent="Player/Camera3D"]
+position = Vector3(-0.46, -0.47, -0.95)
+mesh = SubResource("SphereMesh_hand")
+material_override = SubResource("Material_glove")
+
+[node name="RightHand" type="MeshInstance3D" parent="Player/Camera3D"]
+position = Vector3(0.46, -0.47, -0.95)
+mesh = SubResource("SphereMesh_hand")
+material_override = SubResource("Material_glove")
+
+[node name="StreetLife" type="Node3D" parent="."]
+script = ExtResource("10_street")
+clock_path = NodePath("../Services/WorldClock")
+
+[node name="AudioFeedback" type="Node" parent="."]
+script = ExtResource("14_audio")
+game_path = NodePath("..")
+player_path = NodePath("../Player")
+weather_path = NodePath("../Services/Weather")
+
+[node name="DeliveryHud" type="CanvasLayer" parent="."]
+script = ExtResource("9_hud")
+game_path = NodePath("..")
+clock_path = NodePath("../Services/WorldClock")
+player_path = NodePath("../Player")
+weather_path = NodePath("../Services/Weather")
+
+[node name="TopBar" type="PanelContainer" parent="DeliveryHud"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 52.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBox_dark")
+
+[node name="Margin" type="MarginContainer" parent="DeliveryHud/TopBar"]
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 10
+
+[node name="Stats" type="Label" parent="DeliveryHud/TopBar/Margin"]
+theme_override_colors/font_color = Color(1, 0.9, 0.55, 1)
+theme_override_font_sizes/font_size = 18
+text = "$0.00     ★ —     0 deliveries     0.00 km     07:00 Morning"
+
+[node name="ObjectivePanel" type="PanelContainer" parent="DeliveryHud"]
+offset_left = 18.0
+offset_top = 70.0
+offset_right = 665.0
+offset_bottom = 258.0
+theme_override_styles/panel = SubResource("StyleBox_dark")
+
+[node name="Margin" type="MarginContainer" parent="DeliveryHud/ObjectivePanel"]
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="DeliveryHud/ObjectivePanel/Margin"]
+theme_override_constants/separation = 4
+
+[node name="Objective" type="Label" parent="DeliveryHud/ObjectivePanel/Margin/VBox"]
+theme_override_colors/font_color = Color(0.96, 0.79, 0.3, 1)
+text = "LOOKING FOR ORDERS"
+
+[node name="Detail" type="Label" parent="DeliveryHud/ObjectivePanel/Margin/VBox"]
+text = "Enjoy the ride—another offer is coming."
+
+[node name="Prompt" type="Label" parent="DeliveryHud/ObjectivePanel/Margin/VBox"]
+theme_override_colors/font_color = Color(0.57, 0.87, 0.66, 1)
+
+[node name="CustomerRow" type="HBoxContainer" parent="DeliveryHud/ObjectivePanel/Margin/VBox"]
+visible = false
+custom_minimum_size = Vector2(0, 76)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Portrait" type="TextureRect" parent="DeliveryHud/ObjectivePanel/Margin/VBox/CustomerRow"]
+custom_minimum_size = Vector2(76, 76)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Customer" type="Label" parent="DeliveryHud/ObjectivePanel/Margin/VBox/CustomerRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.88, 0.93, 0.94, 1)
+theme_override_font_sizes/font_size = 15
+text = "CUSTOMER"
+vertical_alignment = 1
+
+[node name="CourierMap" type="Control" parent="DeliveryHud"]
+custom_minimum_size = Vector2(232, 232)
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -250.0
+offset_top = 70.0
+offset_right = -18.0
+offset_bottom = 302.0
+grow_horizontal = 0
+mouse_filter = 2
+script = ExtResource("16_minimap")
+game_path = NodePath("../..")
+player_path = NodePath("../../Player")
+
+[node name="Title" type="Label" parent="DeliveryHud/CourierMap"]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 5.0
+offset_right = 150.0
+offset_bottom = 27.0
+theme_override_colors/font_color = Color(0.96, 0.79, 0.3, 1)
+theme_override_font_sizes/font_size = 13
+text = "COURIER MAP"
+
+[node name="North" type="Label" parent="DeliveryHud/CourierMap"]
+layout_mode = 0
+offset_left = 185.0
+offset_top = 5.0
+offset_right = 223.0
+offset_bottom = 27.0
+theme_override_colors/font_color = Color(0.9, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 12
+text = "N ▲"
+horizontal_alignment = 2
+
+[node name="ResultPanel" type="PanelContainer" parent="DeliveryHud"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -110.0
+offset_right = 360.0
+offset_bottom = 110.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBox_dark")
+
+[node name="Margin" type="MarginContainer" parent="DeliveryHud/ResultPanel"]
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="ResultRow" type="HBoxContainer" parent="DeliveryHud/ResultPanel/Margin"]
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Badge" type="TextureRect" parent="DeliveryHud/ResultPanel/Margin/ResultRow"]
+visible = false
+custom_minimum_size = Vector2(118, 118)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CustomerPortrait" type="TextureRect" parent="DeliveryHud/ResultPanel/Margin/ResultRow"]
+visible = false
+custom_minimum_size = Vector2(142, 142)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Result" type="Label" parent="DeliveryHud/ResultPanel/Margin/ResultRow"]
+custom_minimum_size = Vector2(500, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 0.87, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+text = "DELIVERED!"
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="Instructions" type="Label" parent="DeliveryHud"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -42.0
+offset_right = 260.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 1, 1, 0.88)
+text = "W pedal  •  A/D steer  •  S brake  •  R reset  •  Esc options"
+horizontal_alignment = 1
+
+[node name="PauseMenu" type="CanvasLayer" parent="."]
+script = ExtResource("12_pause")
+input_adapter_path = NodePath("../InputAdapter")
+player_path = NodePath("../Player")
+clock_path = NodePath("../Services/WorldClock")
+progression_path = NodePath("../Services/ProgressionService")
+multiplayer_path = NodePath("../Services/MultiplayerService")
+
+[node name="Overlay" type="ColorRect" parent="PauseMenu"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.015, 0.02, 0.025, 0.82)
+
+[node name="Center" type="CenterContainer" parent="PauseMenu/Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="PauseMenu/Overlay/Center"]
+custom_minimum_size = Vector2(680, 700)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBox_dark")
+
+[node name="Margin" type="MarginContainer" parent="PauseMenu/Overlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="PauseMenu/Overlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 7
+
+[node name="Title" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.83, 0.35, 1)
+theme_override_font_sizes/font_size = 28
+text = "RIDE PAUSED"
+horizontal_alignment = 1
+
+[node name="Profile" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+text = "Lifetime stats"
+horizontal_alignment = 1
+
+[node name="BadgeGallery" type="HBoxContainer" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="Resume" type="Button" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "RESUME"
+
+[node name="LeanRow" type="HBoxContainer" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/LeanRow"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+text = "Camera lean"
+
+[node name="LeanSlider" type="HSlider" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/LeanRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 0.14
+step = 0.005
+value = 0.075
+
+[node name="DayRow" type="HBoxContainer" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/DayRow"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+text = "Real minutes per game day"
+
+[node name="DaySlider" type="HSlider" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/DayRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 4.0
+max_value = 30.0
+step = 1.0
+value = 12.0
+
+[node name="VolumeRow" type="HBoxContainer" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/VolumeRow"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+text = "Master volume"
+
+[node name="VolumeSlider" type="HSlider" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/VolumeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="ControlsTitle" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.57, 0.87, 0.66, 1)
+text = "KEYBOARD CONTROLS"
+
+[node name="Bindings" type="GridContainer" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 5
+columns = 2
+
+[node name="Status" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+text = "Select a control to remap it."
+horizontal_alignment = 1
+
+[node name="ResetBindings" type="Button" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+text = "Restore keyboard defaults"
+
+[node name="BikeStyle" type="Button" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+text = "Bike style: Classic Red"
+
+[node name="NetworkStatus" type="Label" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.57, 0.87, 0.66, 1)
+text = "Multiplayer: Offline"
+
+[node name="Network" type="HBoxContainer" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="Host" type="Button" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/Network"]
+layout_mode = 2
+text = "Host"
+
+[node name="Join" type="Button" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/Network"]
+layout_mode = 2
+text = "Join localhost"
+
+[node name="Offline" type="Button" parent="PauseMenu/Overlay/Center/Panel/Margin/VBox/Network"]
+layout_mode = 2
+text = "Go offline"
+
+[node name="Onboarding" type="CanvasLayer" parent="."]
+layer = 20
+script = ExtResource("13_onboarding")
+
+[node name="Overlay" type="ColorRect" parent="Onboarding"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.03, 0.08, 0.1, 0.94)
+
+[node name="Center" type="CenterContainer" parent="Onboarding/Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Onboarding/Overlay/Center"]
+custom_minimum_size = Vector2(650, 310)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBox_dark")
+
+[node name="Margin" type="MarginContainer" parent="Onboarding/Overlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 36
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 36
+theme_override_constants/margin_bottom = 32
+
+[node name="VBox" type="VBoxContainer" parent="Onboarding/Overlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="Title" type="Label" parent="Onboarding/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.83, 0.35, 1)
+theme_override_font_sizes/font_size = 28
+text = "RIDE YOUR WAY"
+horizontal_alignment = 1
+
+[node name="Body" type="Label" parent="Onboarding/Overlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Pedal with W or your bike."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Next" type="Button" parent="Onboarding/Overlay/Center/Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+text = "NEXT"

@@ -1,0 +1,37 @@
+name: bikegame
+
+vision:
+  camera: 0
+  width: 320
+  height: 180
+  fps: 20
+  min_confidence: 0.5
+  gesture: wrist_buttons
+  gesture_hold_ms: 400
+  gesture_menu_hold_ms: 900
+  gesture_raise_margin: 0.08
+  gesture_stale_after_ms: 250
+
+# Starting values only. M1 exists to tune these on the physical rig.
+x_axis:
+  gain: 1.6
+  deadzone: 0.04
+  smoothing: 0.3
+  invert: false
+  stale_after_ms: 250
+
+y_axis:
+  source: speed_kph
+  min: 0
+  max: 35
+  deadzone: 1
+  smoothing: 0.18
+  curve: linear
+  invert: true
+
+uinput:
+  x_axis: ABS_X
+  y_axis: ABS_Y
+  accept_button: BTN_SOUTH
+  decline_button: BTN_WEST
+  menu_button: BTN_START

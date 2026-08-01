@@ -1,0 +1,12 @@
+# Godot editor/import state
+.godot/
+
+# Local exports and generated packages
+build/
+dist/
+
+# Machine-specific ftms2pad calibration
+integrations/ftms2pad/*.calibration.json
+
+# The separately versioned ftms2pad checkout is reference material only.
+/bikestear/
