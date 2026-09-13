@@ -1,5 +1,7 @@
 extends Node3D
 
+const ToyGeometry = preload("res://src/world/toy_geometry.gd")
+
 const TrafficAgentScript = preload("res://src/agents/traffic_agent.gd")
 const PedestrianAgentScript = preload("res://src/agents/pedestrian_agent.gd")
 const WildlifeAgentScript = preload("res://src/agents/wildlife_agent.gd")
@@ -364,8 +366,8 @@ func _create_pedestrian(index: int) -> CharacterBody3D:
 	var trousers: Color = trouser_colors[index % trouser_colors.size()]
 	var skin: Color = skin_colors[index % skin_colors.size()]
 	_add_capsule_visual(visual_root, "Torso", Vector3(0.0, 0.08, 0.0), 0.245, 0.82, coat)
-	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 0.65, 0.0), 0.19, skin)
-	_add_box_visual(visual_root, "Hair", Vector3(0.0, 0.815, 0.015), Vector3(0.33, 0.1, 0.31), Color("49372d").lightened(float(index % 3) * 0.08))
+	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 0.67, 0.0), 0.27, skin)
+	_add_box_visual(visual_root, "Hair", Vector3(0.0, 0.88, 0.015), Vector3(0.46, 0.15, 0.42), Color("49372d").lightened(float(index % 3) * 0.08))
 	var legs: Array[Transform3D] = []
 	var shoes: Array[Transform3D] = []
 	for leg_x in [-0.13, 0.13]:
@@ -535,8 +537,7 @@ func _add_box_multimesh(
 	transforms: Array,
 	color: Color
 ) -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3.ONE
+	var mesh := ToyGeometry.rounded_box(Vector3.ONE)
 	_add_visual_multimesh(parent, node_name, mesh, transforms, color)
 
 
@@ -582,8 +583,7 @@ func _add_box_visual(
 	color: Color,
 	rotation_z := 0.0
 ) -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = size
+	var mesh := ToyGeometry.rounded_box(size)
 	var visual := MeshInstance3D.new()
 	visual.name = node_name
 	visual.position = at

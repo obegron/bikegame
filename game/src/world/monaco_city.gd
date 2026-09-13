@@ -1,17 +1,17 @@
 extends "res://src/world/delivery_city.gd"
 
-const MONACO_SAND := Color("d8c398")
-const MONACO_STONE := Color("9b927f")
-const MONACO_ROAD := Color("3f474b")
+const MONACO_SAND := Color("f3d7a2")
+const MONACO_STONE := Color("c4bda4")
+const MONACO_ROAD := Color("3b5167")
 const MONACO_PALETTE := [
-	Color("cfad82"),
-	Color("c48e70"),
-	Color("c9ac82"),
-	Color("aeb8a8"),
-	Color("b9826d"),
-	Color("c3aa86"),
-	Color("9daf9f"),
-	Color("ca8f72"),
+	Color("f5c96b"),
+	Color("ed927b"),
+	Color("f8d891"),
+	Color("83cdb6"),
+	Color("e67e75"),
+	Color("d1a9d3"),
+	Color("73bed0"),
+	Color("f4aa63"),
 ]
 const MONACO_FACADE_CHUNK_SIZE := 72.0
 
@@ -43,6 +43,7 @@ func _ready() -> void:
 	_make_monaco_junctions()
 	_road_plan_only = false
 	_grade_monaco_road_network(0.125)
+	_prepare_smooth_road_surface()
 	_make_terrain()
 	_make_surrounding_ocean()
 	_make_mainland_mountain_backdrop()
@@ -899,10 +900,10 @@ func _flush_monaco_facade_batches() -> void:
 		"rail": [_material(Color("354442")), 105.0],
 		"planter": [_material(Color("8f5140")), 80.0],
 		"window": [window_material, 120.0],
-		"shutter_green": [_material(Color("557168")), 105.0],
-		"shutter_plum": [_material(Color("6b5963")), 105.0],
-		"awning_red": [_material(Color("a33f36")), 95.0],
-		"awning_green": [_material(Color("386d68")), 95.0],
+		"shutter_green": [_material(Color("328e88")), 105.0],
+		"shutter_plum": [_material(Color("9266a0")), 105.0],
+		"awning_red": [_material(Color("e76855")), 95.0],
+		"awning_green": [_material(Color("239e97")), 95.0],
 		"door": [_material(Color("49372f")), 90.0],
 		"tower_glass_blue": [tower_blue, 160.0],
 		"tower_glass_grey": [tower_grey, 160.0],
@@ -1009,9 +1010,9 @@ func _make_monaco_residence(
 	building.set_meta("district_style", district_style)
 	_monaco_building_count += 1
 	var roof_color := (
-		Color("b96347")
+		Color("dc7150")
 		if district_style == "Le Rocher old town" or variant % 3 != 0
-		else Color("65727b")
+		else Color("487b98")
 	)
 	if district_style == "Belle Epoque" and variant % 2 == 0:
 		_make_hipped_roof(
@@ -1188,7 +1189,7 @@ func _make_modern_monaco_tower(
 		size,
 		Color("9ba9a6"),
 		true,
-		_facade_material(Color("a9aaa0"))
+		_facade_material(Color("8fcac5"))
 	)
 	shell.add_to_group("monaco_building")
 	shell.add_to_group("monaco_modern_tower")
@@ -1243,7 +1244,7 @@ func _make_casino_quarter() -> void:
 	casino.add_to_group("monaco_landmark")
 	casino.add_to_group("casino_quarter")
 	add_child(casino)
-	var facade := _facade_material(Color("d8c9a4"))
+	var facade := _facade_material(Color("f6d891"))
 	var wing_mesh := BoxMesh.new()
 	wing_mesh.size = Vector3(25.0, 8.5, 12.0)
 	_add_visual_mesh(
@@ -1312,7 +1313,7 @@ func _make_prince_palace() -> void:
 	palace.add_to_group("monaco_landmark")
 	palace.add_to_group("palace")
 	add_child(palace)
-	var palace_material := _facade_material(Color("d8c49f"))
+	var palace_material := _facade_material(Color("f3bf7b"))
 	var main_mesh := BoxMesh.new()
 	main_mesh.size = Vector3(28.0, 10.0, 16.0)
 	_add_visual_mesh(
@@ -2502,8 +2503,8 @@ func _make_palm_tree(at: Vector2, index: int) -> void:
 	palm.add_to_group("monaco_palm")
 	add_child(palm)
 	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.22
-	trunk_mesh.bottom_radius = 0.36
+	trunk_mesh.top_radius = 0.3
+	trunk_mesh.bottom_radius = 0.48
 	trunk_mesh.height = 5.8
 	trunk_mesh.radial_segments = 9
 	_add_visual_mesh(
@@ -2514,20 +2515,21 @@ func _make_palm_tree(at: Vector2, index: int) -> void:
 		Vector3.ZERO,
 		palm
 	)
-	var leaf_material := _material(Color("397653"))
+	var leaf_material := _material(Color("35a477"))
 	leaf_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	for frond_index in 8:
-		var angle := TAU * float(frond_index) / 8.0
-		var frond_mesh := BoxMesh.new()
-		frond_mesh.size = Vector3(0.34, 0.08, 3.8)
-		_add_visual_mesh(
-			"Palm frond",
-			frond_mesh,
-			Vector3(cos(angle) * 1.4, 5.82, sin(angle) * 1.4),
-			leaf_material,
-			Vector3(-0.24, angle, 0.0),
-			palm
+	for frond_index in 9:
+		var angle := TAU * float(frond_index) / 9.0
+		var frond_mesh := SphereMesh.new()
+		frond_mesh.radius = 1.0
+		frond_mesh.height = 2.0
+		frond_mesh.radial_segments = 12
+		frond_mesh.rings = 6
+		var frond := _add_visual_mesh(
+			"Sculpted palm frond", frond_mesh,
+			Vector3(sin(angle) * 1.55, 5.95, cos(angle) * 1.55),
+			leaf_material, Vector3(0.18, angle, 0.0), palm
 		)
+		frond.scale = Vector3(0.65, 0.22, 2.2)
 
 
 func _make_marina_yachts() -> void:

@@ -22,11 +22,15 @@ The repository now contains a playable compact MVP with a start-level selector:
   casino circuit, illuminated road tunnel, Port Hercule marina and yachts,
   palace, museum, Larvotto beach, palms, cypress gardens, and its own restaurants,
   customers, traffic routes, and courier minimap;
-- tiled PBR asphalt, paving, weathered plaster, roof, stone, and animated-water
-  materials; Cornwall/Prague-inspired cornices, dormers, chimneys, window boxes,
-  climbing plants, street flower pots, market garlands, stone cottages, and twin
-  Gothic spires; plus batched low-poly trees, hedges, grasses, coastal gorse, and
-  street-verge flowers;
+- a toy-box art direction shared by both islands: satin painted facades,
+  rounded building edges and little cars, oversized character heads, sculpted
+  palm crowns, coral cycle lanes, teal roads, turquoise water, and quiet terrain
+  colors; warm sunlight and cool fill give the clean geometry volume;
+- procedural pillowy clouds, retained dynamic stars and weather, compact pickup
+  markers, and a delivery card that fits its content; terrain-conforming road
+  layers prevent grass and paving from breaking through bends and junctions;
+- Cornwall/Prague-inspired cornices, dormers, chimneys, window boxes, climbing
+  plants, market garlands, Gothic spires, and batched trees, hedges and flowers;
 - continuous time-of-day lighting, changing clear/overcast/fog/rain weather,
   working street lamps, an automatic bicycle headlight, and time-specific order
   mixes;

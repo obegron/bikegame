@@ -236,14 +236,16 @@ func _create_pickup_signs(locations: Array[Dictionary]) -> void:
 		var location: Dictionary = locations[index]
 		var pickup_label := Label3D.new()
 		pickup_label.name = "Pickup label %02d" % index
-		pickup_label.text = "PICKUP  •  %s" % String(location.name).to_upper()
+		pickup_label.text = "●  PICKUP"
 		pickup_label.position = location.position + Vector3(0.0, 3.4, 0.0)
 		pickup_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		pickup_label.font_size = 42
-		pickup_label.pixel_size = 0.012
+		pickup_label.pixel_size = 0.003
 		pickup_label.modulate = Color("ffe18a")
 		pickup_label.outline_modulate = Color("172126")
 		pickup_label.outline_size = 10
+		pickup_label.visibility_range_begin = 10.0
+		pickup_label.visibility_range_begin_margin = 3.0
 		pickup_label.visibility_range_end = 62.0
 		pickup_label.visibility_range_fade_mode = (
 			GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF

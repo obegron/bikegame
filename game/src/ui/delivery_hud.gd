@@ -26,10 +26,35 @@ const CustomerCatalog = preload("res://src/core/customer_catalog.gd")
 @onready var result_label: Label = $ResultPanel/Margin/ResultRow/Result
 
 
+func _ready() -> void:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("183c46", 0.94)
+	panel_style.set_corner_radius_all(16)
+	panel_style.border_width_left = 4
+	panel_style.border_color = Color("f3bd63")
+	panel_style.shadow_color = Color(0.03, 0.1, 0.14, 0.2)
+	panel_style.shadow_size = 8
+	$ObjectivePanel.add_theme_stylebox_override("panel", panel_style)
+	for label in [detail_label, prompt_label, customer_label]:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	$ObjectivePanel/Margin/VBox/CustomerRow/Portrait.custom_minimum_size = Vector2(56, 56)
+	customer_row.custom_minimum_size.y = 56
+
+
 func _process(_delta: float) -> void:
 	_update_stats()
 	_update_objective()
 	_update_result()
+	prompt_label.visible = not prompt_label.text.is_empty()
+	var active: bool = game.get_active_order() != null or not game.get_offers().is_empty()
+	$ObjectivePanel.size.x = minf(470.0 if active else 380.0, get_viewport().get_visible_rect().size.x - 36.0)
+	_fit_objective_panel.call_deferred()
+
+
+func _fit_objective_panel() -> void:
+	# Fit after text wrapping and container sorting, without first collapsing
+	# the panel to zero (which feeds stale widths back into autowrap sizing).
+	$ObjectivePanel.size.y = $ObjectivePanel/Margin.get_combined_minimum_size().y
 
 
 func _update_stats() -> void:
@@ -86,7 +111,7 @@ func _update_objective() -> void:
 		]
 	)
 	prompt_label.text = (
-		"SPACE/A ACCEPT  •  Q/X DECLINE  •  RIDE TO PICKUP  •  %ds"
+		"SPACE/A accept   •   Q/X decline   •   %ds"
 		% int(ceil(game.get_offer_remaining_seconds(offer)))
 	)
 

@@ -42,8 +42,8 @@ void fragment() {
 		0.82,
 		foliage_hash(foliage_pattern_position * 1.55)
 	);
-	vec3 detailed_color = mix(base_color.rgb, secondary_color.rgb, dapple * detail_mix);
+	vec3 detailed_color = mix(base_color.rgb, secondary_color.rgb, instance_variation * detail_mix);
 	ALBEDO = detailed_color * tint;
-	ROUGHNESS = 0.9;
+	ROUGHNESS = 0.58;
 	METALLIC = 0.0;
 }

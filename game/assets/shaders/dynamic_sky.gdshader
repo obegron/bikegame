@@ -4,7 +4,6 @@ uniform vec4 zenith_color : source_color = vec4(0.22, 0.48, 0.72, 1.0);
 uniform vec4 horizon_color : source_color = vec4(0.7, 0.82, 0.88, 1.0);
 uniform vec4 cloud_color : source_color = vec4(0.94, 0.95, 0.93, 1.0);
 uniform vec4 sun_color : source_color = vec4(1.0, 0.83, 0.55, 1.0);
-uniform sampler2D cloud_panorama : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 sun_direction = vec3(0.0, 0.7, -0.7);
 uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.56;
 uniform float cloud_light = 1.0;
@@ -25,35 +24,6 @@ float hash21(vec2 point) {
 }
 
 
-vec3 sample_cloud_panorama_seamless(vec2 panorama_uv) {
-	float wrapped_u = fract(panorama_uv.x);
-	float safe_u = clamp(wrapped_u, 0.0005, 0.9995);
-	// Use an explicit mip here: the longitude derivative jumps from 1 back to
-	// 0 at the equirectangular wrap, and implicit derivatives can otherwise
-	// select the coarsest mip for exactly one vertical pixel.
-	vec3 primary = textureLod(
-		cloud_panorama,
-		vec2(safe_u, panorama_uv.y),
-		0.75
-	).rgb;
-	float seam_distance = min(wrapped_u, 1.0 - wrapped_u);
-	const float seam_width = 0.055;
-	if (seam_distance < seam_width) {
-		float opposite_u = clamp(1.0 - wrapped_u, 0.0005, 0.9995);
-		vec3 opposite = textureLod(
-			cloud_panorama,
-			vec2(opposite_u, panorama_uv.y),
-			0.75
-		).rgb;
-		float seam_blend = (
-			1.0 - smoothstep(0.0, seam_width, seam_distance)
-		) * 0.5;
-		primary = mix(primary, opposite, seam_blend);
-	}
-	return primary;
-}
-
-
 void sky() {
 	vec3 direction = normalize(EYEDIR);
 	float sky_height = clamp(direction.y * 0.72 + 0.28, 0.0, 1.0);
@@ -67,48 +37,36 @@ void sky() {
 	vec3 haze_color = mix(horizon_color.rgb, cloud_color.rgb, 0.14);
 	sky_color = mix(sky_color, haze_color, horizon_haze * 0.27);
 
-	// The CC0 panorama supplies only cloud structure. Tint, exposure, sun,
-	// moon, and stars remain fully driven by the game's continuous clock.
+	// Celestial longitude keeps clouds and stars continuous around the rider.
 	vec2 panorama_uv = vec2(
 		atan(direction.z, direction.x) / 6.2831853 + 0.5,
 		acos(clamp(direction.y, -1.0, 1.0)) / 3.14159265
 	);
 	panorama_uv.x = fract(panorama_uv.x + TIME * 0.00008);
-	vec3 panorama_cloud = sample_cloud_panorama_seamless(panorama_uv);
-	float panorama_luma = dot(
-		panorama_cloud,
-		vec3(0.299, 0.587, 0.114)
-	);
-	float panorama_chroma = (
-		max(panorama_cloud.r, max(panorama_cloud.g, panorama_cloud.b))
-		- min(panorama_cloud.r, min(panorama_cloud.g, panorama_cloud.b))
-	);
-	float cloud_whiteness = panorama_luma - panorama_chroma * 0.48;
-	float density_edge = mix(0.58, 0.29, cloud_coverage);
-	float clouds = smoothstep(
-		density_edge,
-		density_edge + 0.17,
-		cloud_whiteness
-	);
-	clouds *= smoothstep(-0.045, 0.1, direction.y);
-
-	float cloud_depth = smoothstep(
-		density_edge - 0.06,
-		density_edge + 0.34,
-		cloud_whiteness
-	);
-	float cloud_top_light = smoothstep(-0.04, 0.58, direction.y);
-	vec3 shaded_cloud = cloud_color.rgb * mix(
-		0.46,
-		cloud_light,
-		cloud_depth * 0.72 + cloud_top_light * 0.28
-	);
+	// A small family of overlapping ellipses creates sculpted cloud silhouettes.
+	// Longitude wraps at twelve cells, so there is no panorama seam.
+	vec2 cloud_uv = vec2(panorama_uv.x * 12.0, direction.y * 6.5);
+	cloud_uv.x += TIME * 0.0015;
+	float clouds = 0.0;
+	float cloud_depth = 0.0;
+	for (int layer = 0; layer < 2; layer++) {
+		vec2 p = cloud_uv + vec2(float(layer) * 4.7, -float(layer) * 1.05);
+		float cell = floor(p.x);
+		float seed = hash21(vec2(mod(cell, 12.0), float(layer)));
+		vec2 q = vec2(fract(p.x) - 0.5, p.y - 0.85 - seed * 0.35);
+		q /= mix(0.65, 1.0, seed);
+		float a = length((q - vec2(-0.2, 0.0)) / vec2(0.23, 0.16));
+		float b = length((q - vec2(0.0, 0.1)) / vec2(0.25, 0.28));
+		float c = length((q - vec2(0.23, 0.015)) / vec2(0.22, 0.18));
+		float d = min(a, min(b, c));
+		float mask = (1.0 - smoothstep(0.90, 1.02, d)) * step(seed, cloud_coverage + 0.08);
+		clouds = max(clouds, mask);
+		cloud_depth = max(cloud_depth, mask * smoothstep(-0.16, 0.27, q.y));
+	}
+	clouds *= smoothstep(0.03, 0.15, direction.y);
+	vec3 shaded_cloud = mix(cloud_color.rgb * vec3(0.62, 0.75, 0.87), cloud_color.rgb * 1.38, cloud_depth);
 	float sun_alignment = dot(direction, normalize(sun_direction));
-	float sun_nearness = pow(max(sun_alignment, 0.0), 7.0);
-	float silver_edge = smoothstep(0.06, 0.3, clouds);
-	silver_edge *= 1.0 - smoothstep(0.68, 0.96, clouds);
-	shaded_cloud += sun_color.rgb * sun_nearness * silver_edge * 0.3;
-	sky_color = mix(sky_color, shaded_cloud, clouds * 0.86);
+	sky_color = mix(sky_color, shaded_cloud, clouds * 0.96);
 
 	vec2 spherical_uv = vec2(
 		panorama_uv.x,

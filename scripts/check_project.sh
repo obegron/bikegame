@@ -13,6 +13,7 @@ game/src/player/bike_controller.gd
 game/src/debug/phase_zero_course.gd
 game/src/debug/input_debug_hud.gd
 game/tests/input_mapping_smoke.gd
+game/tests/toy_geometry_smoke.gd
 game/tests/core_services_smoke.gd
 game/tests/progression_smoke.gd
 game/tests/delivery_loop_smoke.gd
@@ -55,6 +56,7 @@ if command -v godot4 >/dev/null 2>&1; then
 		echo "Godot runtime reported errors." >&2
 		exit 1
 	fi
+	godot4 --headless --path "$PROJECT_DIR" --script res://tests/toy_geometry_smoke.gd
 	godot4 --headless --path "$PROJECT_DIR" --script res://tests/input_mapping_smoke.gd
 	godot4 --headless --path "$PROJECT_DIR" --script res://tests/core_services_smoke.gd
 	godot4 --headless --path "$PROJECT_DIR" --script res://tests/progression_smoke.gd
@@ -71,6 +73,7 @@ elif command -v godot >/dev/null 2>&1; then
 		echo "Godot runtime reported errors." >&2
 		exit 1
 	fi
+	godot --headless --path "$PROJECT_DIR" --script res://tests/toy_geometry_smoke.gd
 	godot --headless --path "$PROJECT_DIR" --script res://tests/input_mapping_smoke.gd
 	godot --headless --path "$PROJECT_DIR" --script res://tests/core_services_smoke.gd
 	godot --headless --path "$PROJECT_DIR" --script res://tests/progression_smoke.gd

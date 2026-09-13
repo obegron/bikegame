@@ -9,24 +9,6 @@ const ROOF_SHADER: Shader = preload("res://assets/shaders/roof_tiles.gdshader")
 const ROAD_SURFACE_SHADER: Shader = preload("res://assets/shaders/road_surface.gdshader")
 const FOLIAGE_SHADER: Shader = preload("res://assets/shaders/foliage_wind.gdshader")
 const ISLAND_TERRAIN_SHADER: Shader = preload("res://assets/shaders/island_terrain.gdshader")
-const WEATHERED_PLASTER_COLOR: Texture2D = preload(
-	"res://assets/textures/facade/weathered_plaster_color.png"
-)
-const PLASTER_NORMAL: Texture2D = preload("res://assets/textures/facade/plaster_normal_gl.jpg")
-const PLASTER_ROUGHNESS: Texture2D = preload("res://assets/textures/facade/plaster_roughness.jpg")
-const ROOF_COLOR: Texture2D = preload("res://assets/textures/roof/tiles_color.jpg")
-const ROOF_NORMAL: Texture2D = preload("res://assets/textures/roof/tiles_normal_gl.jpg")
-const ROOF_ROUGHNESS: Texture2D = preload("res://assets/textures/roof/tiles_roughness.jpg")
-const STONE_COLOR: Texture2D = preload("res://assets/textures/stone/stone_color.jpg")
-const STONE_NORMAL: Texture2D = preload("res://assets/textures/stone/stone_normal_gl.jpg")
-const STONE_ROUGHNESS: Texture2D = preload("res://assets/textures/stone/stone_roughness.jpg")
-const ASPHALT_COLOR: Texture2D = preload("res://assets/textures/road/asphalt_color.jpg")
-const ASPHALT_NORMAL: Texture2D = preload("res://assets/textures/road/asphalt_normal_gl.jpg")
-const ASPHALT_ROUGHNESS: Texture2D = preload("res://assets/textures/road/asphalt_roughness.jpg")
-const COBBLE_COLOR: Texture2D = preload("res://assets/textures/road/cobble_color.jpg")
-const COBBLE_NORMAL: Texture2D = preload("res://assets/textures/road/cobble_normal_gl.jpg")
-const COBBLE_ROUGHNESS: Texture2D = preload("res://assets/textures/road/cobble_roughness.jpg")
-
 const FOLIAGE_ASSETS := {
 	"tree_default": preload("res://assets/models/foliage/tree_default.glb"),
 	"tree_oak": preload("res://assets/models/foliage/tree_oak.glb"),
@@ -164,20 +146,22 @@ const FOLIAGE_PROFILES := {
 	},
 }
 
-const GRASS := Color("718f58")
-const GARDEN_GRASS := Color("7da765")
-const ASPHALT := Color("3f474b")
-const COBBLE := Color("77736b")
-const PALE_COBBLE := Color("716d66")
-const SIDEWALK := Color("8f8a80")
-const WATER := Color("397f9d")
-const STONE := Color("948a76")
-const DARK_STONE := Color("746c61")
-const TERRACOTTA := Color("984f38")
-const SLATE := Color("46545c")
-const TRUNK := Color("684a34")
-const LEAVES := Color("4d7c4a")
-const CYCLE_RED := Color("a94f48")
+const ToyGeometry = preload("res://src/world/toy_geometry.gd")
+
+const GRASS := Color("579d68")
+const GARDEN_GRASS := Color("76b46e")
+const ASPHALT := Color("3b5167")
+const COBBLE := Color("c7bba0")
+const PALE_COBBLE := Color("baac91")
+const SIDEWALK := Color("e2d5b7")
+const WATER := Color("279cba")
+const STONE := Color("b7bea9")
+const DARK_STONE := Color("829a95")
+const TERRACOTTA := Color("d96548")
+const SLATE := Color("426f88")
+const TRUNK := Color("96643f")
+const LEAVES := Color("369e6c")
+const CYCLE_RED := Color("e9816d")
 
 const WORLD_MIN_X := -205.0
 const WORLD_MAX_X := 205.0
@@ -195,13 +179,13 @@ const COAST_HALF_EXTENTS := Vector2(218.0, 195.0)
 const WATER_LEVEL := -0.65
 
 const HERITAGE_PALETTE := [
-	Color("d9a66f"),
-	Color("c87962"),
-	Color("e0c58e"),
-	Color("a9b7a0"),
-	Color("c6a5a8"),
-	Color("91aeb5"),
-	Color("d8b77a"),
+	Color("f4be62"),
+	Color("ed886d"),
+	Color("f9d88d"),
+	Color("7ec9b1"),
+	Color("c6a1cf"),
+	Color("77bad3"),
+	Color("efaa56"),
 ]
 
 var _heritage_window_transforms: Array[Transform3D] = []
@@ -238,6 +222,8 @@ var _lighthouse_spotlight: SpotLight3D
 var _lighthouse_lantern_glow: OmniLight3D
 var _lighthouse_lantern_material: StandardMaterial3D
 var _height_noise := FastNoiseLite.new()
+var _smooth_road_heights := PackedFloat32Array()
+var _visual_terrain_heights := PackedFloat32Array()
 var _terrain_macro_texture: NoiseTexture2D
 var _facade_material_cache := {}
 var _stone_material_cache := {}
@@ -295,6 +281,7 @@ func _ready() -> void:
 	_make_city_roads()
 	_road_plan_only = false
 	_harmonize_road_grade_endpoints()
+	_prepare_smooth_road_surface()
 	_make_ground_and_water()
 	_make_city_roads()
 	_make_bridges_and_quays()
@@ -353,8 +340,8 @@ func _make_surrounding_ocean() -> void:
 	var material := _water_material(Color("2f718e"))
 	material.set_shader_parameter("wave_height", 0.36)
 	material.set_shader_parameter("wave_speed", 0.52)
-	material.set_shader_parameter("normal_strength", 2.25)
-	material.set_shader_parameter("foam_strength", 0.58)
+	material.set_shader_parameter("normal_strength", 1.2)
+	material.set_shader_parameter("foam_strength", 0.3)
 	surface.material_override = material
 	surface.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	surface.add_to_group("animated_water")
@@ -406,8 +393,8 @@ func _make_water_body(
 func _water_material(color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = WATER_SHADER
-	material.set_shader_parameter("shallow_color", color.lightened(0.14))
-	material.set_shader_parameter("deep_color", color.darkened(0.58))
+	material.set_shader_parameter("shallow_color", Color("4ac9cb"))
+	material.set_shader_parameter("deep_color", Color("187d9e"))
 	material.set_shader_parameter("foam_color", Color("c8ddd7"))
 	material.set_meta("lightweight_wave_cascade_count", 5)
 	material.set_meta("distance_faded_wave_detail", true)
@@ -434,19 +421,19 @@ func _island_terrain_material() -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = ISLAND_TERRAIN_SHADER
 	material.set_shader_parameter("macro_noise_texture", _terrain_macro_texture)
-	material.set_shader_parameter("cliff_albedo_texture", STONE_COLOR)
-	material.set_shader_parameter("cliff_roughness_texture", STONE_ROUGHNESS)
 	material.set_shader_parameter("grass_color", GRASS)
-	material.set_shader_parameter("heather_color", Color("667853"))
-	material.set_shader_parameter("sand_color", Color("c9b98d"))
-	material.set_shader_parameter("wet_sand_color", Color("887e67"))
-	material.set_shader_parameter("cliff_color", Color("555950"))
-	material.set_shader_parameter("cliff_highlight", Color("73766b"))
+	material.set_shader_parameter("heather_color", Color("4f946b"))
+	material.set_shader_parameter("sand_color", Color("f2d39b"))
+	material.set_shader_parameter("wet_sand_color", Color("c6b280"))
+	material.set_shader_parameter("cliff_color", Color("9ba9a6"))
+	material.set_shader_parameter("cliff_highlight", Color("c3c6b2"))
 	material.set_shader_parameter("water_level", WATER_LEVEL)
 	return material
 
 
 func ground_height_at(x: float, z: float) -> float:
+	if not _smooth_road_heights.is_empty():
+		return _height_from_grid(_smooth_road_heights, x, z)
 	var natural_height := _natural_ground_height_at(x, z)
 	# Channels and open sea remain cut through the island; their crossings are
 	# handled by real bridge collision instead of terrain grading.
@@ -703,6 +690,7 @@ func _make_terrain() -> void:
 	terrain.add_to_group("island_terrain")
 	add_child(terrain)
 
+	_visual_terrain_heights = heights
 	var height_shape := HeightMapShape3D.new()
 	height_shape.map_width = TERRAIN_WIDTH
 	height_shape.map_depth = TERRAIN_DEPTH
@@ -886,10 +874,12 @@ func _make_city_roads() -> void:
 		[
 			Vector3(186.0, 0.0, -94.0),
 			Vector3(190.0, 0.0, -67.0),
+			Vector3(191.0, 0.0, -58.0),
 		],
 		8.0
 	)
 	var east_coastal_road_south: Array[Vector3] = [
+		Vector3(191.0, 0.0, -58.0),
 		Vector3(191.0, 0.0, -49.0),
 		Vector3(192.0, 0.0, 4.0),
 		Vector3(182.0, 0.0, 64.0),
@@ -912,6 +902,7 @@ func _make_city_roads() -> void:
 			Vector3(152.0, 0.0, -82.0),
 			Vector3(170.0, 0.0, -80.0),
 			Vector3(184.8, 0.0, -64.5),
+			Vector3(191.0, 0.0, -58.0),
 		],
 		8.0
 	)
@@ -935,10 +926,10 @@ func _make_city_roads() -> void:
 	], 6.0)
 	_make_cobble_path("East old wall lane", [
 		Vector3(48.0, 0.0, -54.0),
-		Vector3(54.0, 0.0, -37.0),
-		Vector3(50.0, 0.0, -16.0),
-		Vector3(56.0, 0.0, 4.0),
-		Vector3(51.0, 0.0, 27.0),
+		Vector3(49.0, 0.0, -37.0),
+		Vector3(49.0, 0.0, -16.0),
+		Vector3(49.0, 0.0, 4.0),
+		Vector3(48.0, 0.0, 27.0),
 		Vector3(44.0, 0.0, 48.0),
 	], 6.0)
 	_make_cobble_path("North old wall lane", [
@@ -1446,7 +1437,7 @@ func _make_town_hall() -> void:
 
 
 func _make_market_details() -> void:
-	var awning_colors := [Color("a94f48"), Color("d7b45e"), Color("6d8b75")]
+	var awning_colors := [Color("e9816d"), Color("d7b45e"), Color("6d8b75")]
 	for index in [0, 2]:
 		var x := -10.0 + float(index) * 10.0
 		var stall_ground := ground_height_at(x, -15.5)
@@ -1775,7 +1766,7 @@ func _add_visual_mesh(
 
 func _make_medieval_gate() -> void:
 	var gate_ground := ground_height_at(0.0, 47.0)
-	for x in [-7.5, 7.5]:
+	for x in [-8.5, 8.5]:
 		_make_box(
 			"South gate tower",
 			Vector3(x, gate_ground + 5.5, 47.0),
@@ -1818,7 +1809,7 @@ func _make_south_quarter() -> void:
 		9.5,
 		6.4,
 		8.0,
-		Color("e0c58e"),
+		Color("f9d88d"),
 		PI
 	)
 	var row_x := [-50.0, -40.0, -30.0, -20.0, -12.0, 12.0, 20.0, 30.0, 40.0, 50.0]
@@ -2088,7 +2079,7 @@ func _make_north_bank() -> void:
 		12.0,
 		6.6,
 		8.0,
-		Color("d9a66f"),
+		Color("f4be62"),
 		PI
 	)
 	_make_heritage_house(
@@ -2097,7 +2088,7 @@ func _make_north_bank() -> void:
 		12.5,
 		6.8,
 		10.0,
-		Color("91aeb5"),
+		Color("77bad3"),
 		0.0
 	)
 	var north_row_x := [-148.0, -134.0, -120.0, -106.0, -76.0, -60.0, -44.0, -14.0, 16.0, 34.0, 52.0, 70.0, 112.0, 130.0, 148.0]
@@ -2169,7 +2160,7 @@ func _make_orchard_outskirts() -> void:
 		11.0,
 		5.8,
 		10.0,
-		Color("a9b7a0"),
+		Color("7ec9b1"),
 		PI * 0.5
 	)
 	var cottage_x := [-162.0, -164.0, -164.0, -164.0, -162.0]
@@ -3286,7 +3277,7 @@ func _make_bridges_and_quays() -> void:
 			"Arched canal bridge",
 			Vector3(-82.0, 0.0, crossing_z),
 			Vector3(-64.0, 0.0, crossing_z),
-			9.0,
+			10.0,
 			STONE,
 			0.72
 		)
@@ -5204,6 +5195,7 @@ func _make_cobble_road(node_name: String, from: Vector3, to: Vector3, width: flo
 
 
 func _make_modern_path(node_name: String, points: Array[Vector3], width: float) -> void:
+	points = _fillet_road_path(points)
 	for index in points.size() - 1:
 		_register_road_corridor(
 			points[index],
@@ -5351,6 +5343,8 @@ func _make_terrain_ribbon(
 	color: Color,
 	height_offset: float
 ) -> void:
+	if color.is_equal_approx(SIDEWALK):
+		height_offset = 0.045
 	if samples.size() < 2:
 		return
 	var vertices := PackedVector3Array()
@@ -5414,7 +5408,7 @@ func _make_terrain_ribbon(
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _conform_road_arrays(arrays, height_offset))
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	instance.mesh = mesh
@@ -5466,6 +5460,8 @@ func _make_terrain_polygon(
 	color: Color,
 	height_offset: float
 ) -> MeshInstance3D:
+	if color.is_equal_approx(SIDEWALK):
+		height_offset = 0.045
 	var center := Vector2.ZERO
 	for point: Vector2 in points:
 		center += point
@@ -5501,7 +5497,7 @@ func _make_terrain_polygon(
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _conform_road_arrays(arrays, height_offset))
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	instance.mesh = mesh
@@ -5550,11 +5546,8 @@ func _make_road_junctions() -> void:
 		Vector3(58.0, 0.0, -82.0),
 		Vector3(0.0, 0.0, -82.0),
 		Vector3(92.0, 0.0, -82.0),
-		Vector3(-150.0, 0.0, -132.0),
-		Vector3(150.0, 0.0, -121.0),
 		Vector3(-152.0, 0.0, -82.0),
 		Vector3(152.0, 0.0, -82.0),
-		Vector3(-182.0, 0.0, -68.0),
 		Vector3(-132.0, 0.0, 18.0),
 		Vector3(-144.0, 0.0, 4.0),
 	]
@@ -5797,7 +5790,9 @@ func _make_terrain_disc(
 	color: Color,
 	height_offset: float
 ) -> MeshInstance3D:
-	var radial_segments := 24
+	if color.is_equal_approx(SIDEWALK):
+		height_offset = 0.045
+	var radial_segments := 64
 	var rings := maxi(2, int(ceil(radius / 1.5)))
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
@@ -5853,7 +5848,7 @@ func _make_terrain_disc(
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _conform_road_arrays(arrays, height_offset))
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	instance.mesh = mesh
@@ -5873,6 +5868,8 @@ func _make_terrain_ring(
 	color: Color,
 	height_offset: float
 ) -> MeshInstance3D:
+	if color.is_equal_approx(SIDEWALK):
+		height_offset = 0.045
 	var radial_segments := 48
 	var radial_rings := maxi(2, int(ceil((outer_radius - inner_radius) / 0.75)))
 	var vertices := PackedVector3Array()
@@ -5917,7 +5914,7 @@ func _make_terrain_ring(
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _conform_road_arrays(arrays, height_offset))
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	instance.mesh = mesh
@@ -6119,7 +6116,7 @@ func _flush_decoration_batches() -> void:
 		_make_unit_leaf_multimesh(
 			"Cottage climbing leaves",
 			_house_vine_leaf_transforms,
-			Color("4d7c4a")
+			Color("369e6c")
 		),
 	]
 	for vegetation_batch: MultiMeshInstance3D in facade_vegetation_batches:
@@ -6350,19 +6347,19 @@ func _is_kenney_foliage_green(color: Color) -> bool:
 func _foliage_green_for(variant: String) -> Color:
 	match variant:
 		"tree_oak":
-			return Color("477447")
+			return Color("369b69")
 		"tree_pine":
-			return Color("355f42")
+			return Color("278479")
 		"tree_default":
-			return Color("568451")
+			return Color("54b578")
 		"tree_cherry":
 			return Color("e694ae")
 		"bush_detailed":
-			return Color("527d42")
+			return Color("45aa6b")
 		"bush_small":
-			return Color("628e4b")
+			return Color("70bf70")
 		"grass_leaf":
-			return Color("678e48")
+			return Color("7cc276")
 		"dandelion_yellow", "dandelion_seed":
 			return Color("668d48")
 		_:
@@ -6465,8 +6462,7 @@ func _make_box(
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	body.add_child(collision)
-	var mesh := BoxMesh.new()
-	mesh.size = size
+	var mesh := ToyGeometry.rounded_box(size)
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.mesh = mesh
 	mesh_instance.material_override = visual_material if visual_material != null else _material(color)
@@ -6481,8 +6477,7 @@ func _make_visual_box(
 	size: Vector3,
 	color: Color
 ) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
+	var mesh := ToyGeometry.rounded_box(size)
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = node_name
 	mesh_instance.position = at
@@ -6498,8 +6493,7 @@ func _make_box_multimesh(
 	transforms: Array[Transform3D],
 	color: Color
 ) -> MultiMeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
+	var mesh := ToyGeometry.rounded_box(size)
 	return _make_multimesh(node_name, mesh, transforms, _material(color))
 
 
@@ -6509,8 +6503,7 @@ func _make_unit_box_multimesh(
 	color: Color,
 	material: Material = null
 ) -> MultiMeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3.ONE
+	var mesh := ToyGeometry.rounded_box(Vector3.ONE)
 	return _make_multimesh(
 		node_name,
 		mesh,
@@ -6619,10 +6612,6 @@ func _facade_material(color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = FACADE_SHADER
 	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("albedo_texture", WEATHERED_PLASTER_COLOR)
-	material.set_shader_parameter("normal_texture", PLASTER_NORMAL)
-	material.set_shader_parameter("roughness_texture", PLASTER_ROUGHNESS)
-	material.set_shader_parameter("age_strength", 0.72)
 	_facade_material_cache[key] = material
 	return material
 
@@ -6634,9 +6623,6 @@ func _stone_material(color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = STONE_SHADER
 	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("albedo_texture", STONE_COLOR)
-	material.set_shader_parameter("normal_texture", STONE_NORMAL)
-	material.set_shader_parameter("roughness_texture", STONE_ROUGHNESS)
 	_stone_material_cache[key] = material
 	return material
 
@@ -6648,9 +6634,6 @@ func _roof_material(color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = ROOF_SHADER
 	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("albedo_texture", ROOF_COLOR)
-	material.set_shader_parameter("normal_texture", ROOF_NORMAL)
-	material.set_shader_parameter("roughness_texture", ROOF_ROUGHNESS)
 	_roof_material_cache[key] = material
 	return material
 
@@ -6677,20 +6660,7 @@ func _road_material(color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = ROAD_SURFACE_SHADER
 	material.set_shader_parameter("base_color", color)
-	if is_asphalt:
-		material.set_shader_parameter("albedo_texture", ASPHALT_COLOR)
-		material.set_shader_parameter("normal_texture", ASPHALT_NORMAL)
-		material.set_shader_parameter("roughness_texture", ASPHALT_ROUGHNESS)
-		material.set_shader_parameter("detail_strength", 0.72)
-		material.set_shader_parameter("normal_depth", 0.38)
-		material.set_shader_parameter("roughness_floor", 0.73)
-	else:
-		material.set_shader_parameter("albedo_texture", COBBLE_COLOR)
-		material.set_shader_parameter("normal_texture", COBBLE_NORMAL)
-		material.set_shader_parameter("roughness_texture", COBBLE_ROUGHNESS)
-		material.set_shader_parameter("detail_strength", 0.9)
-		material.set_shader_parameter("normal_depth", 0.62)
-		material.set_shader_parameter("roughness_floor", 0.66)
+	material.set_shader_parameter("roughness", 0.72 if is_asphalt else 0.6)
 	_road_material_cache[key] = material
 	return material
 
@@ -6698,7 +6668,7 @@ func _road_material(color: Color) -> ShaderMaterial:
 func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
-	material.roughness = 0.84
+	material.roughness = 0.48
 	return material
 
 
@@ -6708,3 +6678,188 @@ func _emissive_material(color: Color) -> StandardMaterial3D:
 	material.emission = color
 	material.emission_energy_multiplier = 1.3
 	return material
+
+
+func _rendered_ground_height(x: float, z: float) -> float:
+	return _height_from_grid(_visual_terrain_heights, x, z)
+
+
+func _conform_road_arrays(arrays: Array, height_offset: float) -> Array:
+	# Clip to the *rendered* terrain triangles. Sampling the analytic height
+	# function separately creates intersections even with very dense ribbons.
+	# All nested road layers now occupy the same planes with ordered offsets.
+	if _visual_terrain_heights.is_empty():
+		return arrays
+	var source: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var source_indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for triangle in range(0, source_indices.size(), 3):
+		var points := PackedVector2Array()
+		for corner in 3:
+			var p := source[source_indices[triangle + corner]]
+			points.append(Vector2(p.x, p.z))
+		var bounds := Rect2(points[0], Vector2.ZERO).expand(points[1]).expand(points[2])
+		var min_x := int(floor((bounds.position.x - TERRAIN_MIN_X) / TERRAIN_CELL_SIZE))
+		var min_z := int(floor((bounds.position.y - TERRAIN_MIN_Z) / TERRAIN_CELL_SIZE))
+		var max_x := int(floor((bounds.end.x - TERRAIN_MIN_X) / TERRAIN_CELL_SIZE))
+		var max_z := int(floor((bounds.end.y - TERRAIN_MIN_Z) / TERRAIN_CELL_SIZE))
+		for iz in range(min_z, max_z + 1):
+			for ix in range(min_x, max_x + 1):
+				var a := Vector2(TERRAIN_MIN_X + ix * TERRAIN_CELL_SIZE, TERRAIN_MIN_Z + iz * TERRAIN_CELL_SIZE)
+				var b := a + Vector2(TERRAIN_CELL_SIZE, 0.0)
+				var c := a + Vector2(0.0, TERRAIN_CELL_SIZE)
+				var d := a + Vector2.ONE * TERRAIN_CELL_SIZE
+				for tile in [PackedVector2Array([a,b,c]), PackedVector2Array([b,d,c])]:
+					for polygon: PackedVector2Array in Geometry2D.intersect_polygons(points, tile):
+						if Geometry2D.is_polygon_clockwise(polygon):
+							polygon.reverse()
+						for corner in range(1, polygon.size() - 1):
+							var p0 := polygon[0]
+							var p1 := polygon[corner]
+							var p2 := polygon[corner + 1]
+							if absf((p1 - p0).cross(p2 - p0)) < 0.00001:
+								continue
+							for point in [p0,p1,p2]:
+								indices.append(vertices.size())
+								vertices.append(Vector3(point.x, _rendered_ground_height(point.x, point.y) + height_offset, point.y))
+								normals.append(Vector3.UP)
+								uvs.append(point / 3.2)
+	var result := []
+	result.resize(Mesh.ARRAY_MAX)
+	result[Mesh.ARRAY_VERTEX] = vertices
+	result[Mesh.ARRAY_NORMAL] = normals
+	result[Mesh.ARRAY_TEX_UV] = uvs
+	result[Mesh.ARRAY_INDEX] = indices
+	return result
+
+
+func _prepare_smooth_road_surface() -> void:
+	# Filter only land around road corridors. A shared height field removes
+	# winner-takes-all corridor seams from rendering, collision and agents.
+	var heights := PackedFloat32Array()
+	var influence := PackedFloat32Array()
+	heights.resize(TERRAIN_WIDTH * TERRAIN_DEPTH)
+	influence.resize(heights.size())
+	for iz in TERRAIN_DEPTH:
+		for ix in TERRAIN_WIDTH:
+			var x := TERRAIN_MIN_X + ix * TERRAIN_CELL_SIZE
+			var z := TERRAIN_MIN_Z + iz * TERRAIN_CELL_SIZE
+			var index := iz * TERRAIN_WIDTH + ix
+			heights[index] = ground_height_at(x, z)
+			if _natural_ground_height_at(x, z) <= WATER_LEVEL + 0.1:
+				continue
+			var clearance := road_surface_clearance_at(Vector3(x, 0.0, z))
+			influence[index] = 1.0 - smoothstep(3.0, 12.0, clearance)
+	for iteration in 18:
+		var filtered := heights.duplicate()
+		for iz in range(1, TERRAIN_DEPTH - 1):
+			for ix in range(1, TERRAIN_WIDTH - 1):
+				var index := iz * TERRAIN_WIDTH + ix
+				if influence[index] <= 0.0:
+					continue
+				var total := heights[index] * 4.0
+				var weight := 4.0
+				for dz in [-1, 0, 1]:
+					for dx in [-1, 0, 1]:
+						if dx == 0 and dz == 0:
+							continue
+						var neighbor: int = index + dz * TERRAIN_WIDTH + dx
+						# Preserve water channels and bridge abutments.
+						if heights[neighbor] <= WATER_LEVEL + 0.1:
+							continue
+						var kernel := 2.0 if dx == 0 or dz == 0 else 1.0
+						total += heights[neighbor] * kernel
+						weight += kernel
+				filtered[index] = lerpf(heights[index], total / weight, influence[index])
+		heights = filtered
+	# Shape a level cross-section from the smoothed centerline profile, rather
+	# than allowing adjacent hillside elevations to bank the cycle lanes.
+	for pass_index in 3:
+		var leveled := heights.duplicate()
+		for iz in range(1, TERRAIN_DEPTH - 1):
+			for ix in range(1, TERRAIN_WIDTH - 1):
+				var index := iz * TERRAIN_WIDTH + ix
+				if influence[index] <= 0.0:
+					continue
+				var point := Vector2(TERRAIN_MIN_X + ix * TERRAIN_CELL_SIZE, TERRAIN_MIN_Z + iz * TERRAIN_CELL_SIZE)
+				var total := 0.0
+				var total_weight := 0.0
+				var coverage := 0.0
+				for corridor: Dictionary in _road_corridors:
+					var from: Vector2 = corridor.from
+					var segment: Vector2 = corridor.to - from
+					var t := clampf((point - from).dot(segment) / maxf(segment.length_squared(), 0.001), 0.0, 1.0)
+					var center := from + segment * t
+					var distance := point.distance_to(center)
+					var radius := float(corridor.radius)
+					if distance >= radius + 8.0:
+						continue
+					var weight := pow(1.0 - smoothstep(0.0, radius + 8.0, distance), 4.0)
+					total += _height_from_grid(heights, center.x, center.y) * weight
+					total_weight += weight
+					coverage = maxf(coverage, 1.0 - smoothstep(radius + 0.8, radius + 8.0, distance))
+				if total_weight > 0.0001:
+					leveled[index] = lerpf(heights[index], total / total_weight, coverage)
+		heights = leveled
+	# Bound the gradient on the shared terrain triangles. Bounding both grid
+	# axes by max_grade/sqrt(2) also bounds diagonally aligned roads.
+	var axis_delta := TERRAIN_CELL_SIZE * 0.12 / sqrt(2.0)
+	for iteration in 100:
+		var largest_excess := 0.0
+		for iz in range(1, TERRAIN_DEPTH - 1):
+			for ix in range(1, TERRAIN_WIDTH - 1):
+				var index := iz * TERRAIN_WIDTH + ix
+				if influence[index] < 0.99:
+					continue
+				for neighbor in [index + 1, index + TERRAIN_WIDTH]:
+					if influence[neighbor] < 0.99:
+						continue
+					var difference: float = heights[neighbor] - heights[index]
+					var excess := absf(difference) - axis_delta
+					if excess <= 0.0001:
+						continue
+					var correction := signf(difference) * excess * 0.5
+					heights[index] += correction
+					heights[neighbor] -= correction
+					largest_excess = maxf(largest_excess, excess)
+		if largest_excess < 0.0005:
+			break
+	_smooth_road_heights = heights
+
+
+func _height_from_grid(heights: PackedFloat32Array, x: float, z: float) -> float:
+	var gx := clampf((x - TERRAIN_MIN_X) / TERRAIN_CELL_SIZE, 0.0, TERRAIN_WIDTH - 1.001)
+	var gz := clampf((z - TERRAIN_MIN_Z) / TERRAIN_CELL_SIZE, 0.0, TERRAIN_DEPTH - 1.001)
+	var ix := int(gx)
+	var iz := int(gz)
+	var u := gx - ix
+	var v := gz - iz
+	var index := iz * TERRAIN_WIDTH + ix
+	if u + v <= 1.0:
+		return heights[index] * (1.0 - u - v) + heights[index + 1] * u + heights[index + TERRAIN_WIDTH] * v
+	return heights[index + TERRAIN_WIDTH + 1] * (u + v - 1.0) + heights[index + 1] * (1.0 - v) + heights[index + TERRAIN_WIDTH] * (1.0 - u)
+
+
+func _fillet_road_path(points: Array[Vector3]) -> Array[Vector3]:
+	var rounded: Array[Vector3] = [points[0]]
+	for index in range(1, points.size() - 1):
+		var before := points[index - 1]
+		var corner := points[index]
+		var after := points[index + 1]
+		var incoming := corner.direction_to(before)
+		var outgoing := corner.direction_to(after)
+		var turn := PI - acos(clampf(incoming.dot(outgoing), -1.0, 1.0))
+		if turn < deg_to_rad(12.0):
+			rounded.append(corner)
+			continue
+		var trim := minf(7.0, minf(corner.distance_to(before), corner.distance_to(after)) * 0.3)
+		var entry := corner + incoming * trim
+		var exit_point := corner + outgoing * trim
+		for step in 9:
+			var t := float(step) / 8.0
+			rounded.append(entry.lerp(corner, t).lerp(corner.lerp(exit_point, t), t))
+	rounded.append(points[-1])
+	return rounded

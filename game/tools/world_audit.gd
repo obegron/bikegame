@@ -122,6 +122,7 @@ func _audit_level(level_id: String, scene_path: String) -> Dictionary:
 	var roads := _extract_roads(city)
 	var violations: Array[Dictionary] = []
 	var road_metrics := _audit_roads(city, roads, violations)
+	var profile_metrics := _audit_road_profiles(city, roads, violations)
 	var building_metrics := _audit_buildings(city, violations)
 	var clearance_metrics := _audit_road_clearance(city, violations)
 	var finding_sample_count := violations.size()
@@ -160,6 +161,10 @@ func _audit_level(level_id: String, scene_path: String) -> Dictionary:
 				city.get_meta("monaco_batched_plant_count", 0)
 			),
 			"maximum_grade": float(road_metrics.maximum_grade),
+			"ride_surface_samples": int(profile_metrics.samples),
+			"maximum_local_grade": float(profile_metrics.maximum_grade),
+			"maximum_local_grade_change": float(profile_metrics.maximum_grade_change),
+			"maximum_local_cross_slope": float(profile_metrics.maximum_cross_slope),
 			"maximum_cross_slope": float(road_metrics.maximum_cross_slope),
 			"minimum_bend_radius": float(road_metrics.minimum_bend_radius),
 			"road_obstruction_count": int(
@@ -1272,3 +1277,58 @@ func _xml_escape(value: String) -> String:
 		.replace(">", "&gt;")
 		.replace('"', "&quot;")
 	)
+
+
+func _audit_road_profiles(city: Node, roads: Array[Dictionary], violations: Array[Dictionary]) -> Dictionary:
+	var maximum_grade := 0.0
+	var maximum_grade_change := 0.0
+	var maximum_cross_slope := 0.0
+	var sample_count := 0
+	for road: Dictionary in roads:
+		var points: Array = road.points
+		var width := float(road.width)
+		for segment_index in points.size() - 1:
+			var from: Vector2 = points[segment_index]
+			var to: Vector2 = points[segment_index + 1]
+			var length := from.distance_to(to)
+			if length < 0.1:
+				continue
+			var count := maxi(2, int(ceil(length / 1.25)))
+			var step_length := length / count
+			var side := Vector2(-(to - from).y, (to - from).x).normalized()
+			# Include both cycle lanes. Endpoint-only centerline audits miss
+			# bumps between endpoints and steep strips along the road margins.
+			for lane: float in [-0.35, 0.0, 0.35]:
+				var previous_height := NAN
+				var previous_grade := NAN
+				for sample_index in count + 1:
+					var center := from.lerp(to, float(sample_index) / count)
+					var point := center + side * width * lane
+					var height := float(city.call("travel_surface_height_at", point.x, point.y))
+					sample_count += 1
+					if not is_nan(previous_height):
+						var grade := (height - previous_height) / step_length
+						maximum_grade = maxf(maximum_grade, absf(grade))
+						if absf(grade) > 0.135:
+							_add_violation(violations, "local_road_grade", "error", point,
+								"%s local ride-surface grade %.1f%%" % [road.name, absf(grade) * 100.0],
+								{"road": road.name, "grade": absf(grade), "lane_offset": lane * width})
+						if not is_nan(previous_grade):
+							var change := absf(grade - previous_grade)
+							maximum_grade_change = maxf(maximum_grade_change, change)
+							if change > 0.08:
+								_add_violation(violations, "road_surface_kink", "error", point,
+									"%s abrupt ride-surface grade change %.1f%%" % [road.name, change * 100.0],
+									{"road": road.name, "grade_change": change})
+						previous_grade = grade
+					previous_height = height
+					if lane == 0.0:
+						var left := center - side * width * 0.35
+						var right := center + side * width * 0.35
+						var cross_slope := absf(float(city.call("travel_surface_height_at", left.x, left.y)) - float(city.call("travel_surface_height_at", right.x, right.y))) / (width * 0.7)
+						maximum_cross_slope = maxf(maximum_cross_slope, cross_slope)
+						if cross_slope > 0.105:
+							_add_violation(violations, "local_cross_slope", "error", center,
+								"%s local cross-slope %.1f%%" % [road.name, cross_slope * 100.0],
+								{"road": road.name, "cross_slope": cross_slope})
+	return {"samples": sample_count, "maximum_grade": maximum_grade, "maximum_grade_change": maximum_grade_change, "maximum_cross_slope": maximum_cross_slope}

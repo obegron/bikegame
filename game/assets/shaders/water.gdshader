@@ -142,16 +142,16 @@ void fragment() {
 	);
 	sun_glint *= daylight * (1.0 - foam);
 
-	float reflection_amount = mix(0.13, 0.62, fresnel);
+	float reflection_amount = mix(0.08, 0.35, fresnel);
 	vec3 final_color = mix(water_color, sky_reflection, reflection_amount);
 	final_color = mix(final_color, foam_color.rgb, foam);
 	final_color += sun_color.rgb * sun_glint * 0.025;
-	final_color *= 0.6;
+	final_color *= 0.94;
 
 	ALBEDO = final_color;
 	ROUGHNESS = mix(0.38, 0.68, foam);
 	METALLIC = 0.08;
 	SPECULAR = 0.55;
 	EMISSION = sky_reflection * fresnel * 0.006;
-	ALPHA = 0.965;
+	ALPHA = 1.0;
 }

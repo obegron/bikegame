@@ -123,10 +123,8 @@ func _run() -> void:
 	var time_of_day = game.get_node("Services/TimeOfDay")
 	_expect(
 		bool(sky_material.get_meta("layered_cloud_sky", false))
-		and String(sky_material.get_meta("cloud_detail_texture", "")).ends_with(
-			"evening_road_01_pure_sky.png"
-		),
-		"the procedural sky should include layered cloud banks and cirrus"
+		and bool(sky_material.get_meta("sculpted_cloud_sky", false)),
+		"the dynamic sky should use the sculpted toy cloud treatment"
 	)
 	_expect(
 		time_of_day.get_meta(
@@ -182,7 +180,7 @@ func _run() -> void:
 		not environment.fog_enabled
 		and is_equal_approx(
 			float(sky_material.get_shader_parameter("cloud_coverage")),
-			0.56
+			0.36
 		),
 		"clear weather should restore the normal sky and visibility"
 	)
@@ -305,7 +303,7 @@ func _run() -> void:
 		"direct daylight and contrast grading should model buildings without flat ambient wash"
 	)
 	_expect(
-		environment.tonemap_exposure < 0.85,
+		environment.tonemap_exposure < 1.0,
 		"daylight exposure should preserve color in pale sand, water, and plaster"
 	)
 	var guild_house = game.get_node("City/North guild house 03")
@@ -313,14 +311,13 @@ func _run() -> void:
 	_expect(
 		not facade_meshes.is_empty()
 		and facade_meshes[0].material_override is ShaderMaterial,
-		"heritage buildings should use textured facade materials"
+		"heritage buildings should use painted facade materials"
 	)
 	var facade_material := facade_meshes[0].material_override as ShaderMaterial
-	var facade_albedo := facade_material.get_shader_parameter("albedo_texture") as Texture2D
+	var facade_color: Color = facade_material.get_shader_parameter("base_color")
 	_expect(
-		facade_albedo != null
-		and facade_albedo.resource_path.ends_with("weathered_plaster_color.png"),
-		"heritage façades should use the generated weathered plaster texture"
+		facade_color.a == 1.0 and facade_color.s > 0.15,
+		"heritage façades should retain their opaque painted palette"
 	)
 	_expect(
 		get_nodes_in_group("heritage_architecture_detail").size() >= 6
@@ -332,11 +329,11 @@ func _run() -> void:
 	_expect(
 		arrival_road is MeshInstance3D
 		and arrival_road.material_override is ShaderMaterial,
-		"modern roads should use the tiled asphalt material"
+		"modern roads should use the satin road material"
 	)
 	_expect(
 		get_nodes_in_group("textured_road").size() > 70,
-		"asphalt, paving, and sidewalk surfaces should all be textured"
+		"asphalt, paving, and sidewalks should share the road surface treatment"
 	)
 	var foliage_instances := 0
 	var foliage_variants := {}
@@ -585,10 +582,8 @@ func _run() -> void:
 	var terrain_material := island_terrain.material_override as ShaderMaterial
 	_expect(
 		terrain_arrays[Mesh.ARRAY_COLOR].size() == terrain_arrays[Mesh.ARRAY_VERTEX].size()
-		and terrain_material.get_shader_parameter("macro_noise_texture") != null
-		and terrain_material.get_shader_parameter("cliff_albedo_texture") != null
-		and terrain_material.get_shader_parameter("cliff_roughness_texture") != null,
-		"terrain should carry a control map plus projected macro/PBR material inputs"
+		and terrain_material.get_shader_parameter("macro_noise_texture") != null,
+		"terrain should carry a control map and broad color variation"
 	)
 	_expect(
 		city.ground_height_at(0.0, 185.0) < city.ground_height_at(0.0, 150.0)

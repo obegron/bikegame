@@ -1,9 +1,6 @@
 extends Node
 
 const DYNAMIC_SKY_SHADER: Shader = preload("res://assets/shaders/dynamic_sky.gdshader")
-const CLOUD_PANORAMA: Texture2D = preload(
-	"res://assets/textures/sky/evening_road_01_pure_sky.png"
-)
 
 @export var clock_path: NodePath
 @export var environment_path: NodePath
@@ -21,8 +18,8 @@ const HOURS := [0.0, 5.0, 8.0, 12.0, 18.5, 21.0, 24.0]
 const SKY_COLORS := [
 	Color("10172d"),
 	Color("2d3859"),
-	Color("86bed3"),
-	Color("70b4d4"),
+	Color("85cbdc"),
+	Color("70bce1"),
 	Color("e68a68"),
 	Color("263453"),
 	Color("10172d"),
@@ -31,7 +28,7 @@ const LIGHT_COLORS := [
 	Color("7180ac"),
 	Color("d49a78"),
 	Color("fff0d0"),
-	Color("fff7df"),
+	Color("ffe9c7"),
 	Color("ffb073"),
 	Color("8592bd"),
 	Color("7180ac"),
@@ -53,9 +50,8 @@ var _shooting_star_visibility := 0.0
 func _ready() -> void:
 	_sky_material = ShaderMaterial.new()
 	_sky_material.shader = DYNAMIC_SKY_SHADER
-	_sky_material.set_shader_parameter("cloud_panorama", CLOUD_PANORAMA)
 	_sky_material.set_meta("layered_cloud_sky", true)
-	_sky_material.set_meta("cloud_detail_texture", CLOUD_PANORAMA.resource_path)
+	_sky_material.set_meta("sculpted_cloud_sky", true)
 	var sky := Sky.new()
 	sky.sky_material = _sky_material
 	_world_environment.environment.sky = sky
@@ -97,19 +93,16 @@ func _process(delta: float) -> void:
 	light_energy *= lerpf(1.0, 0.64, cloudiness)
 	var daylight := smoothstep(0.12, 0.92, light_energy)
 	environment.background_color = sky_color
-	# Cooler, lower-energy fill preserves readable shade without washing every
-	# facade to the same value. Daylight exposure is lowered separately so pale
-	# sand and water keep their color instead of clipping to white, while night
-	# regains exposure for the headlight and working lamps.
+	# Warm key and cool fill give molded shapes volume throughout the day.
 	environment.ambient_light_color = sky_color.lerp(
 		light_color,
 		0.48 + mediterranean_warmth * 0.08
 	)
-	environment.ambient_light_energy = maxf(0.04, light_energy * 0.24)
-	environment.tonemap_exposure = lerpf(1.0, 0.82, daylight) * lerpf(1.0, 0.94, cloudiness)
-	environment.adjustment_contrast = lerpf(1.02, 1.06, daylight)
+	environment.ambient_light_energy = maxf(0.04, light_energy * 0.36)
+	environment.tonemap_exposure = lerpf(1.0, 0.88, daylight) * lerpf(1.0, 0.94, cloudiness)
+	environment.adjustment_contrast = lerpf(1.02, 1.08, daylight)
 	environment.adjustment_saturation = (
-		lerpf(1.0, 1.01 + mediterranean_warmth * 0.025, daylight)
+		lerpf(1.0, 1.08 + mediterranean_warmth * 0.025, daylight)
 		* lerpf(1.0, 0.88, cloudiness)
 	)
 	environment.fog_enabled = weather_fog > 0.002
@@ -227,7 +220,7 @@ func _update_sky(
 		"cloud_light",
 		lerpf(0.5, 0.88, daylight) * lerpf(1.0, 0.58, cloudiness)
 	)
-	_sky_material.set_shader_parameter("cloud_coverage", lerpf(0.56, 0.9, cloudiness))
+	_sky_material.set_shader_parameter("cloud_coverage", lerpf(0.36, 0.9, cloudiness))
 	_sky_material.set_shader_parameter(
 		"star_visibility",
 		star_visibility * lerpf(1.0, 0.08, cloudiness)
