@@ -1,0 +1,62 @@
+{
+  "car": {
+    "triangles": 3024,
+    "materials": 1
+  },
+  "taxi": {
+    "triangles": 4968,
+    "materials": 1
+  },
+  "bus": {
+    "triangles": 3456,
+    "materials": 1
+  },
+  "pickup": {
+    "triangles": 3456,
+    "materials": 1
+  },
+  "truck": {
+    "triangles": 3780,
+    "materials": 1
+  },
+  "person_0": {
+    "triangles": 3768,
+    "materials": 1
+  },
+  "person_1": {
+    "triangles": 3876,
+    "materials": 1
+  },
+  "person_2": {
+    "triangles": 3816,
+    "materials": 1
+  },
+  "person_3": {
+    "triangles": 3816,
+    "materials": 1
+  },
+  "dog": {
+    "triangles": 3156,
+    "materials": 1
+  },
+  "fox": {
+    "triangles": 3384,
+    "materials": 1
+  },
+  "horse": {
+    "triangles": 3492,
+    "materials": 1
+  },
+  "cow": {
+    "triangles": 3720,
+    "materials": 1
+  },
+  "pig": {
+    "triangles": 4056,
+    "materials": 1
+  },
+  "goose": {
+    "triangles": 1836,
+    "materials": 1
+  }
+}

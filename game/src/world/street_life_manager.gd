@@ -1,7 +1,5 @@
 extends Node3D
 
-const ToyGeometry = preload("res://src/world/toy_geometry.gd")
-
 const TrafficAgentScript = preload("res://src/agents/traffic_agent.gd")
 const PedestrianAgentScript = preload("res://src/agents/pedestrian_agent.gd")
 const WildlifeAgentScript = preload("res://src/agents/wildlife_agent.gd")
@@ -275,72 +273,45 @@ func _spawn_birds() -> void:
 		_birds.append(bird)
 
 
-func _create_car(index: int) -> CharacterBody3D:
-	var body := CharacterBody3D.new()
-	body.name = "Car%02d" % index
-	body.set_script(TrafficAgentScript)
-	body.collision_layer = 2
-	body.collision_mask = 1
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.65, 1.0, 3.2)
-	var collision := CollisionShape3D.new()
-	collision.shape = shape
-	body.add_child(collision)
+# Cached PackedScenes share imported meshes and materials between every agent.
+const VEHICLE_TYPES := ["car", "taxi", "bus", "pickup", "truck"]
+const VEHICLE_LENGTHS := [3.35, 3.35, 4.5, 3.75, 3.9]
+var _actor_scenes: Dictionary = {}
+static var _actor_material: StandardMaterial3D
+
+
+func _add_actor_visual(body: Node3D, asset: String, ground_offset: float) -> void:
+	if not _actor_scenes.has(asset):
+		_actor_scenes[asset] = load("res://assets/models/street_life/%s.glb" % asset)
 	var visual_root := Node3D.new()
 	visual_root.name = "VisualRoot"
 	body.add_child(visual_root)
-	var colors := [Color("d95f59"), Color("4f86b8"), Color("e5b94f"), Color("77a26a")]
-	var paint: Color = colors[index % colors.size()]
-	var glass := Color("263e4b")
-	# A readable bonnet/cabin/boot silhouette costs only a handful of boxes but
-	# stops traffic reading as a single placeholder block from rider height.
-	_add_box_multimesh(visual_root, "PaintedBody", [
-		_scaled_visual_transform(Vector3(0.0, -0.12, 0.0), Vector3(1.72, 0.52, 3.18)),
-		_scaled_visual_transform(Vector3(0.0, 0.18, -1.05), Vector3(1.64, 0.24, 0.92)),
-		_scaled_visual_transform(Vector3(0.0, 0.17, 1.22), Vector3(1.64, 0.26, 0.62)),
-		_scaled_visual_transform(Vector3(0.0, 0.48, 0.14), Vector3(1.42, 0.58, 1.42)),
-		_scaled_visual_transform(Vector3(0.0, 0.79, 0.17), Vector3(1.3, 0.12, 1.08)),
-	], paint)
-	var glass_panels: Array[Transform3D] = [
-		_scaled_visual_transform(Vector3(0.0, 0.49, -0.585), Vector3(1.18, 0.35, 0.035)),
-		_scaled_visual_transform(Vector3(0.0, 0.49, 0.865), Vector3(1.18, 0.35, 0.035)),
-	]
-	var dark_trim: Array[Transform3D] = [
-		_scaled_visual_transform(Vector3(0.0, -0.18, -1.64), Vector3(1.48, 0.11, 0.1)),
-		_scaled_visual_transform(Vector3(0.0, -0.18, 1.64), Vector3(1.48, 0.11, 0.1)),
-	]
-	for side_x in [-0.718, 0.718]:
-		glass_panels.append(_scaled_visual_transform(
-			Vector3(side_x, 0.49, 0.15), Vector3(0.035, 0.35, 0.94)
-		))
-		dark_trim.append(_scaled_visual_transform(
-			Vector3(side_x * 1.015, 0.27, 0.48), Vector3(0.025, 0.055, 0.22)
-		))
-	_add_box_multimesh(visual_root, "Glazing", glass_panels, glass)
-	_add_box_multimesh(visual_root, "BumpersAndHandles", dark_trim, Color("33383a"))
-	var headlights: Array[Transform3D] = []
-	var tail_lights: Array[Transform3D] = []
-	for light_x in [-0.55, 0.55]:
-		headlights.append(_scaled_visual_transform(
-			Vector3(light_x, 0.02, -1.605), Vector3(0.3, 0.18, 0.045)
-		))
-		tail_lights.append(_scaled_visual_transform(
-			Vector3(light_x, 0.02, 1.605), Vector3(0.28, 0.17, 0.045)
-		))
-	_add_box_multimesh(visual_root, "Headlights", headlights, Color("f1d999"))
-	_add_box_multimesh(visual_root, "TailLights", tail_lights, Color("9d292d"))
-	var wheels: Array[Transform3D] = []
-	var hubs: Array[Transform3D] = []
-	for wheel_x in [-0.88, 0.88]:
-		for wheel_z in [-1.03, 1.03]:
-			wheels.append(_scaled_visual_transform(
-				Vector3(wheel_x, -0.33, wheel_z), Vector3(0.27, 0.16, 0.27), 90.0
-			))
-			hubs.append(_scaled_visual_transform(
-				Vector3(wheel_x, -0.33, wheel_z), Vector3(0.12, 0.175, 0.12), 90.0
-			))
-	_add_cylinder_multimesh(visual_root, "Tyres", wheels, Color("25292b"))
-	_add_cylinder_multimesh(visual_root, "WheelHubs", hubs, Color("9ca2a0"))
+	var model: Node3D = _actor_scenes[asset].instantiate()
+	# Explicitly enable glTF's linear vertex palette; some Godot importers
+	# retain COLOR_0 but leave vertex_color_use_as_albedo disabled.
+	if _actor_material == null:
+		_actor_material = StandardMaterial3D.new()
+		_actor_material.vertex_color_use_as_albedo = true
+		_actor_material.roughness = 0.72
+	for mesh_instance in model.find_children("*", "MeshInstance3D", true, false):
+		mesh_instance.material_override = _actor_material
+	model.position.y = -ground_offset
+	visual_root.add_child(model)
+
+
+func _create_car(index: int) -> CharacterBody3D:
+	var kind := posmod(index, VEHICLE_TYPES.size())
+	var body := CharacterBody3D.new()
+	body.name = "Car%02d" % index
+	body.set_script(TrafficAgentScript)
+	body.set_meta("vehicle_type", VEHICLE_TYPES[kind])
+	body.vehicle_length = VEHICLE_LENGTHS[kind]
+	body.collision_layer = 2
+	# Vehicles must block each other as well as scenery.
+	body.collision_mask = 3
+	var height := 1.9 if kind == 2 or kind == 4 else 1.45
+	_set_actor_collision(body, Vector3(1.96, height, VEHICLE_LENGTHS[kind]), height * 0.5 - 0.52)
+	_add_actor_visual(body, VEHICLE_TYPES[kind], 0.52)
 	return body
 
 
@@ -356,61 +327,20 @@ func _create_pedestrian(index: int) -> CharacterBody3D:
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	body.add_child(collision)
-	var visual_root := Node3D.new()
-	visual_root.name = "VisualRoot"
-	body.add_child(visual_root)
-	var coat_colors := [Color("6b82b4"), Color("d37f64"), Color("6ca07b"), Color("ac78a6")]
-	var trouser_colors := [Color("344653"), Color("4a423c"), Color("33483c"), Color("514055")]
-	var skin_colors := [Color("d6a276"), Color("8f5f43"), Color("efc29a"), Color("b87955")]
-	var coat: Color = coat_colors[index % coat_colors.size()]
-	var trousers: Color = trouser_colors[index % trouser_colors.size()]
-	var skin: Color = skin_colors[index % skin_colors.size()]
-	_add_capsule_visual(visual_root, "Torso", Vector3(0.0, 0.08, 0.0), 0.245, 0.82, coat)
-	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 0.67, 0.0), 0.27, skin)
-	_add_box_visual(visual_root, "Hair", Vector3(0.0, 0.88, 0.015), Vector3(0.46, 0.15, 0.42), Color("49372d").lightened(float(index % 3) * 0.08))
-	var legs: Array[Transform3D] = []
-	var shoes: Array[Transform3D] = []
-	for leg_x in [-0.13, 0.13]:
-		legs.append(_scaled_visual_transform(
-			Vector3(leg_x, -0.53, 0.0), Vector3(0.13, 0.62, 0.15)
-		))
-		shoes.append(_scaled_visual_transform(
-			Vector3(leg_x, -0.82, -0.045), Vector3(0.16, 0.1, 0.27)
-		))
-	_add_box_multimesh(visual_root, "Legs", legs, trousers)
-	_add_box_multimesh(visual_root, "Shoes", shoes, Color("292a2b"))
-	var arms: Array[Transform3D] = []
-	for arm_x in [-0.32, 0.32]:
-		arms.append(_scaled_visual_transform(
-			Vector3(arm_x, 0.06, 0.0),
-			Vector3(0.12, 0.58, 0.13),
-			-8.0 * signf(arm_x)
-		))
-	_add_box_multimesh(visual_root, "Arms", arms, coat.darkened(0.04))
+	_add_actor_visual(body, "person_%d" % posmod(index, 4), 0.9)
 	return body
 
 
 func _create_animal(index: int) -> CharacterBody3D:
+	var species := "dog" if index < 2 else "fox"
 	var body := CharacterBody3D.new()
-	body.name = "Dog" if index < 2 else "Fox"
+	body.name = species.capitalize()
 	body.set_script(WildlifeAgentScript)
+	body.set_meta("species", species)
 	body.collision_layer = 8
 	body.collision_mask = 1
-	var shape := CapsuleShape3D.new()
-	shape.radius = 0.28
-	shape.height = 0.9
-	var collision := CollisionShape3D.new()
-	collision.rotation_degrees.x = 90.0
-	collision.shape = shape
-	body.add_child(collision)
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.28
-	mesh.height = 0.9
-	var visual := MeshInstance3D.new()
-	visual.rotation_degrees.x = 90.0
-	visual.mesh = mesh
-	visual.material_override = _material(Color("9a6a43") if index < 2 else Color("d66d3f"))
-	body.add_child(visual)
+	_set_actor_collision(body, Vector3(0.6, 0.9, 1.65), 0.0)
+	_add_actor_visual(body, species, 0.45)
 	return body
 
 
@@ -421,242 +351,25 @@ func _create_farm_animal(species: String, index: int) -> CharacterBody3D:
 	body.collision_layer = 8
 	body.collision_mask = 1
 	body.set_meta("species", species)
-	var visual_root := Node3D.new()
-	visual_root.name = "VisualRoot"
-	body.add_child(visual_root)
-	match species:
-		"horse":
-			_build_horse(body, visual_root)
-		"cow":
-			_build_cow(body, visual_root)
-		"pig":
-			_build_pig(body, visual_root, index)
-		"goose":
-			_build_goose(body, visual_root, index)
+	var size: Vector3 = {
+		"horse": Vector3(1.0, 2.3, 2.8),
+		"cow": Vector3(1.1, 2.0, 2.8),
+		"pig": Vector3(0.65, 1.1, 1.65),
+		"goose": Vector3(0.55, 1.35, 1.0),
+	}[species]
+	_set_actor_collision(body, size, size.y * 0.5)
+	_add_actor_visual(body, species, 0.0)
 	return body
 
 
-func _build_horse(body: CharacterBody3D, visual_root: Node3D) -> void:
-	_set_farm_collision(body, Vector3(0.9, 1.65, 2.35), 0.84)
-	var coat := Color("8e5639")
-	var dark := Color("382a24")
-	_add_capsule_visual(visual_root, "Body", Vector3(0.0, 1.22, 0.0), 0.48, 2.15, coat, 90.0)
-	_add_box_visual(visual_root, "Neck", Vector3(0.0, 1.62, -0.82), Vector3(0.5, 1.25, 0.48), coat, -18.0)
-	_add_capsule_visual(visual_root, "Head", Vector3(0.0, 2.08, -1.26), 0.27, 0.72, coat, 90.0)
-	for x in [-0.3, 0.3]:
-		for z in [-0.66, 0.66]:
-			_add_box_visual(
-				visual_root,
-				"Leg",
-				Vector3(x, 0.5, z),
-				Vector3(0.16, 1.0, 0.17),
-				coat
-			)
-	_add_box_visual(visual_root, "Mane", Vector3(0.0, 1.86, -0.74), Vector3(0.12, 0.78, 0.64), dark, -18.0)
-	_add_box_visual(visual_root, "Tail", Vector3(0.0, 1.1, 1.2), Vector3(0.14, 0.72, 0.14), dark, 28.0)
-	for x in [-0.14, 0.14]:
-		_add_sphere_visual(visual_root, "Eye", Vector3(x, 2.17, -1.53), 0.035, Color("141313"))
-
-
-func _build_cow(body: CharacterBody3D, visual_root: Node3D) -> void:
-	_set_farm_collision(body, Vector3(1.15, 1.55, 2.35), 0.78)
-	var hide := Color("e3d9bd")
-	var patches := Color("3d3b37")
-	_add_capsule_visual(visual_root, "Body", Vector3(0.0, 1.12, 0.0), 0.56, 2.15, hide, 90.0)
-	_add_box_visual(visual_root, "Patch left", Vector3(-0.53, 1.2, 0.2), Vector3(0.07, 0.48, 0.72), patches, 12.0)
-	_add_box_visual(visual_root, "Patch right", Vector3(0.53, 1.25, -0.46), Vector3(0.07, 0.42, 0.58), patches, -8.0)
-	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 1.5, -1.22), 0.43, hide)
-	_add_box_visual(visual_root, "Muzzle", Vector3(0.0, 1.34, -1.57), Vector3(0.58, 0.32, 0.4), Color("c99d8d"))
-	for x in [-0.36, 0.36]:
-		for z in [-0.66, 0.66]:
-			_add_box_visual(
-				visual_root,
-				"Leg",
-				Vector3(x, 0.45, z),
-				Vector3(0.18, 0.9, 0.2),
-				patches
-			)
-	for x in [-0.28, 0.28]:
-		_add_box_visual(visual_root, "Horn", Vector3(x, 1.9, -1.25), Vector3(0.12, 0.28, 0.12), Color("d8c58e"), x * 45.0)
-		_add_sphere_visual(visual_root, "Eye", Vector3(x * 1.2, 1.62, -1.56), 0.04, Color("111111"))
-
-
-func _build_pig(body: CharacterBody3D, visual_root: Node3D, index: int) -> void:
-	_set_farm_collision(body, Vector3(0.7, 0.85, 1.35), 0.43)
-	var pink := Color("d98e8f").lightened(float(index) * 0.035)
-	_add_capsule_visual(visual_root, "Body", Vector3(0.0, 0.62, 0.0), 0.38, 1.25, pink, 90.0)
-	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 0.72, -0.72), 0.34, pink)
-	_add_cylinder_visual(visual_root, "Snout", Vector3(0.0, 0.65, -1.0), 0.18, 0.22, Color("bc7177"), 90.0)
-	for x in [-0.22, 0.22]:
-		for z in [-0.34, 0.34]:
-			_add_box_visual(visual_root, "Leg", Vector3(x, 0.2, z), Vector3(0.12, 0.4, 0.13), pink)
-		_add_box_visual(visual_root, "Ear", Vector3(x, 1.0, -0.67), Vector3(0.2, 0.25, 0.08), pink, x * 40.0)
-		_add_sphere_visual(visual_root, "Eye", Vector3(x, 0.79, -0.98), 0.027, Color("171313"))
-
-
-func _build_goose(body: CharacterBody3D, visual_root: Node3D, index: int) -> void:
-	_set_farm_collision(body, Vector3(0.42, 1.05, 0.72), 0.53)
-	var feathers := Color("ece8d7").darkened(float(index % 3) * 0.025)
-	var orange := Color("dc8c32")
-	_add_capsule_visual(visual_root, "Body", Vector3(0.0, 0.45, 0.05), 0.22, 0.68, feathers, 90.0)
-	_add_cylinder_visual(visual_root, "Neck", Vector3(0.0, 0.78, -0.19), 0.09, 0.62, feathers)
-	_add_sphere_visual(visual_root, "Head", Vector3(0.0, 1.1, -0.2), 0.14, feathers)
-	_add_box_visual(visual_root, "Beak", Vector3(0.0, 1.08, -0.38), Vector3(0.14, 0.08, 0.26), orange)
-	for x in [-0.1, 0.1]:
-		_add_box_visual(visual_root, "Foot", Vector3(x, 0.04, 0.02), Vector3(0.1, 0.07, 0.22), orange)
-		_add_sphere_visual(visual_root, "Eye", Vector3(x * 0.75, 1.13, -0.32), 0.018, Color("101010"))
-
-
-func _set_farm_collision(body: CharacterBody3D, size: Vector3, center_y: float) -> void:
+func _set_actor_collision(body: CharacterBody3D, size: Vector3, center_y: float) -> void:
 	var shape := BoxShape3D.new()
 	shape.size = size
 	var collision := CollisionShape3D.new()
+	collision.name = "CollisionShape3D"
 	collision.position.y = center_y
 	collision.shape = shape
 	body.add_child(collision)
-
-
-func _scaled_visual_transform(
-	at: Vector3,
-	size: Vector3,
-	rotation_z_degrees := 0.0
-) -> Transform3D:
-	var basis := Basis.IDENTITY.rotated(
-		Vector3.FORWARD,
-		deg_to_rad(rotation_z_degrees)
-	)
-	basis.x *= size.x
-	basis.y *= size.y
-	basis.z *= size.z
-	return Transform3D(basis, at)
-
-
-func _add_box_multimesh(
-	parent: Node3D,
-	node_name: String,
-	transforms: Array,
-	color: Color
-) -> void:
-	var mesh := ToyGeometry.rounded_box(Vector3.ONE)
-	_add_visual_multimesh(parent, node_name, mesh, transforms, color)
-
-
-func _add_cylinder_multimesh(
-	parent: Node3D,
-	node_name: String,
-	transforms: Array,
-	color: Color
-) -> void:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 1.0
-	mesh.bottom_radius = 1.0
-	mesh.height = 1.0
-	mesh.radial_segments = 10
-	_add_visual_multimesh(parent, node_name, mesh, transforms, color)
-
-
-func _add_visual_multimesh(
-	parent: Node3D,
-	node_name: String,
-	mesh: Mesh,
-	transforms: Array,
-	color: Color
-) -> void:
-	var multimesh := MultiMesh.new()
-	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = mesh
-	multimesh.instance_count = transforms.size()
-	for index in transforms.size():
-		multimesh.set_instance_transform(index, transforms[index])
-	var visual := MultiMeshInstance3D.new()
-	visual.name = node_name
-	visual.multimesh = multimesh
-	visual.material_override = _material(color)
-	parent.add_child(visual)
-
-
-func _add_box_visual(
-	parent: Node3D,
-	node_name: String,
-	at: Vector3,
-	size: Vector3,
-	color: Color,
-	rotation_z := 0.0
-) -> void:
-	var mesh := ToyGeometry.rounded_box(size)
-	var visual := MeshInstance3D.new()
-	visual.name = node_name
-	visual.position = at
-	visual.rotation_degrees.z = rotation_z
-	visual.mesh = mesh
-	visual.material_override = _material(color)
-	parent.add_child(visual)
-
-
-func _add_sphere_visual(
-	parent: Node3D,
-	node_name: String,
-	at: Vector3,
-	radius: float,
-	color: Color
-) -> void:
-	var mesh := SphereMesh.new()
-	mesh.radius = radius
-	mesh.height = radius * 2.0
-	mesh.radial_segments = 10
-	mesh.rings = 5
-	var visual := MeshInstance3D.new()
-	visual.name = node_name
-	visual.position = at
-	visual.mesh = mesh
-	visual.material_override = _material(color)
-	parent.add_child(visual)
-
-
-func _add_capsule_visual(
-	parent: Node3D,
-	node_name: String,
-	at: Vector3,
-	radius: float,
-	height: float,
-	color: Color,
-	rotation_x := 0.0
-) -> void:
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius
-	mesh.height = height
-	mesh.radial_segments = 10
-	mesh.rings = 5
-	var visual := MeshInstance3D.new()
-	visual.name = node_name
-	visual.position = at
-	visual.rotation_degrees.x = rotation_x
-	visual.mesh = mesh
-	visual.material_override = _material(color)
-	parent.add_child(visual)
-
-
-func _add_cylinder_visual(
-	parent: Node3D,
-	node_name: String,
-	at: Vector3,
-	radius: float,
-	height: float,
-	color: Color,
-	rotation_x := 0.0
-) -> void:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = radius
-	mesh.bottom_radius = radius
-	mesh.height = height
-	mesh.radial_segments = 10
-	var visual := MeshInstance3D.new()
-	visual.name = node_name
-	visual.position = at
-	visual.rotation_degrees.x = rotation_x
-	visual.mesh = mesh
-	visual.material_override = _material(color)
-	parent.add_child(visual)
 
 
 func _create_bird(index: int) -> Node3D:

@@ -37,8 +37,9 @@ The repository now contains a playable compact MVP with a start-level selector:
 - the full offer → pickup → drop-off → rating → tip → pay loop, with seven named
   illustrated customers and rating-sensitive delivery dialogue;
 - a north-up courier minimap with rider heading, route, and objective;
-- signal-aware traffic, pedestrians, dogs, foxes, farm animals, and small daytime
-  bird flocks;
+- signal-aware compact cars, taxis, buses, pickups, and delivery trucks; four
+  toy-like pedestrian looks, expressive dogs, foxes and farm animals, and small
+  daytime bird flocks;
 - persistent game and exercise-proxy stats, achievements, and cosmetic bike styles;
 - onboarding, pause/options, keyboard remapping, and generated feedback audio; and
 - optional ENet hosting/joining with server-owned clock and orders.

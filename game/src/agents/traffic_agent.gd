@@ -2,13 +2,12 @@ extends CharacterBody3D
 
 var route: Array[Vector3] = []
 var cruise_speed := 5.5
+var vehicle_length := 3.35
 
 var _target_index := 0
 var _corner_pause := 0.0
 var _player: Node3D
 var _terrain: Node
-var _traffic_wait_seconds := 0.0
-var _yield_override_seconds := 0.0
 var _stuck_seconds := 0.0
 
 
@@ -30,7 +29,6 @@ func _physics_process(delta: float) -> void:
 	if route.size() < 2:
 		return
 	_corner_pause = maxf(0.0, _corner_pause - delta)
-	_yield_override_seconds = maxf(0.0, _yield_override_seconds - delta)
 	var target := route[_target_index]
 	var flat_target := Vector3(target.x, global_position.y, target.z)
 	if global_position.distance_to(flat_target) < 1.0:
@@ -41,18 +39,11 @@ func _physics_process(delta: float) -> void:
 	var direction := global_position.direction_to(flat_target)
 	var traffic_ahead := _traffic_is_ahead(direction)
 	var red_signal_ahead := _red_signal_is_ahead(direction)
-	if traffic_ahead:
-		_traffic_wait_seconds += delta
-	else:
-		_traffic_wait_seconds = 0.0
-	if _traffic_wait_seconds > 2.2:
-		_yield_override_seconds = 1.0
-		_traffic_wait_seconds = 0.0
 	var should_yield := (
 		_corner_pause > 0.0
 		or _bike_is_ahead(direction)
 		or red_signal_ahead
-		or (traffic_ahead and _yield_override_seconds <= 0.0)
+		or traffic_ahead
 	)
 	var speed := 0.0 if should_yield else cruise_speed
 	velocity = direction * speed
@@ -67,7 +58,6 @@ func _physics_process(delta: float) -> void:
 		_stuck_seconds = 0.0
 	if _stuck_seconds > 1.8:
 		_target_index = (_target_index + 1) % route.size()
-		_yield_override_seconds = 1.2
 		_stuck_seconds = 0.0
 
 
@@ -83,7 +73,10 @@ func _traffic_is_ahead(direction: Vector3) -> bool:
 		if other == self or not other is Node3D:
 			continue
 		var offset: Vector3 = other.global_position - global_position
-		if offset.length() < 3.4 and direction.dot(offset.normalized()) > 0.6:
+		if other.process_mode == Node.PROCESS_MODE_DISABLED:
+			continue
+		var following_distance: float = (vehicle_length + other.vehicle_length) * 0.5 + 1.0
+		if offset.length() < following_distance and direction.dot(offset.normalized()) > 0.6:
 			return true
 	return false
 
